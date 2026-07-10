@@ -1,7 +1,6 @@
 import { useState, useEffect, FormEvent } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useWebRTC, FileProgress } from '../lib/useWebRTC';
-import { ArrowLeft, Wifi, File as FileIcon, CheckCircle2, Loader2, AlertCircle, Download } from 'lucide-react';
 import { formatBytes } from '../lib/utils';
 
 interface ReceiverProps {
@@ -10,12 +9,21 @@ interface ReceiverProps {
 
 export function Receiver({ onBack }: ReceiverProps) {
   const [scanError, setScanError] = useState<string | null>(null);
-  const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = useWebRTC();
   const [manualCode, setManualCode] = useState('');
+  const [showManual, setShowManual] = useState(false);
+  
+  const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = useWebRTC();
 
   useEffect(() => {
-    // Only init scanner if we haven't connected yet
     if (status !== 'idle') return;
+
+    // Check for deep link auto-join
+    const params = new URLSearchParams(window.location.search);
+    const roomFromUrl = params.get('room');
+    if (roomFromUrl) {
+      initSignaling(roomFromUrl, 'receiver');
+      return;
+    }
 
     const scanner = new Html5QrcodeScanner(
       "qr-reader",
@@ -26,6 +34,16 @@ export function Receiver({ onBack }: ReceiverProps) {
     scanner.render(
       (decodedText) => {
         try {
+          if (decodedText.startsWith('http')) {
+            const url = new URL(decodedText);
+            const room = url.searchParams.get('room');
+            if (room) {
+              scanner.clear();
+              initSignaling(room, 'receiver');
+              return;
+            }
+          }
+
           const data = JSON.parse(decodedText);
           if (data.roomId) {
             scanner.clear();
@@ -47,7 +65,6 @@ export function Receiver({ onBack }: ReceiverProps) {
     };
   }, [initSignaling, status]);
 
-  // Clean up WebRTC on unmount
   useEffect(() => {
     return () => disconnect();
   }, [disconnect]);
@@ -60,129 +77,139 @@ export function Receiver({ onBack }: ReceiverProps) {
   };
 
   const isConnected = status === 'connected' || status === 'transferring' || status === 'complete';
+  const receivedFiles = Object.values(filesProgress) as FileProgress[];
+  const hasFiles = receivedFiles.length > 0;
+  const totalBytes = receivedFiles.reduce((acc, f) => acc + f.size, 0);
+
+  if (hasFiles) {
+    return (
+      <section className="screen active" id="done">
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+          <button className="header-back" onClick={onBack}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <h2 className="title" style={{ margin: 0, marginLeft: '8px' }}>
+            {receivedFiles.length} {receivedFiles.length === 1 ? 'file' : 'files'} received
+          </h2>
+        </div>
+        <p className="desc" style={{ marginLeft: '40px' }}>Saved directly to this device.</p>
+
+        <div className="summary-pill">
+          <div><div className="big">{formatBytes(totalBytes)}</div><div className="small">TOTAL TRANSFERRED</div></div>
+          <div className="right"><div className="big">{status === 'transferring' ? '...' : 'Done'}</div><div className="small">{connectionType === 'local' ? 'LOCAL WIFI ⚡' : 'RELAYED 🌐'}</div></div>
+        </div>
+
+        {/* Mobile View */}
+        <div className="mobile-only">
+          {receivedFiles.map((file) => (
+            <div key={file.fileId} className="file-chip">
+              <div className="meta">
+                <span className="name">{file.name}</span>
+                <span className="size">{formatBytes(file.size)}</span>
+              </div>
+              {file.status === 'complete' && (
+                <a href={file.blobUrl} download={file.name} style={{ textDecoration: 'none' }}>
+                  <span className="check" style={{ cursor: 'pointer' }}>✓</span>
+                </a>
+              )}
+              {file.status !== 'complete' && (
+                <div className="progress-wrap"><div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div></div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop View */}
+        <table className="file-table desktop-only">
+          <thead><tr><th>File</th><th>Size</th><th></th></tr></thead>
+          <tbody>
+            {receivedFiles.map((file) => (
+              <tr key={file.fileId}>
+                <td>{file.name}</td>
+                <td className="size">{formatBytes(file.size)}</td>
+                <td className="check">
+                  {file.status === 'complete' ? (
+                    <a href={file.blobUrl} download={file.name} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <span style={{ cursor: 'pointer' }}>✓</span>
+                    </a>
+                  ) : (
+                    <span style={{ color: 'var(--muted)', fontSize: '12px' }}>{Math.round((file.bytesTransferred / file.size) * 100)}%</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <button className="secondary-btn" onClick={onBack}>Send something back</button>
+      </section>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-screen p-6 max-w-lg mx-auto w-full">
-      <header className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 -ml-2 rounded-full hover:bg-gray-200 transition-colors">
-          <ArrowLeft className="w-6 h-6 text-gray-700" />
+    <section className="screen active" id="scan">
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+        <button className="header-back" onClick={onBack}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 flex-1">Receive Files</h1>
-        
-        {isConnected && (
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-            <Wifi className="w-4 h-4" />
-            <span>{connectionType === 'local' ? 'Local WiFi ⚡' : 'Relayed 🌐'}</span>
-          </div>
-        )}
-      </header>
+        <h2 className="title" style={{ margin: 0, marginLeft: '8px' }}>Point a camera at the code</h2>
+      </div>
+      <p className="desc" style={{ marginLeft: '40px' }}>Open Tata Dransfer on your phone and tap Scan — connects in about a second.</p>
 
       {errorMsg && (
-        <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <p className="text-sm">{errorMsg}</p>
+        <div style={{ padding: '16px', background: '#FEF2F2', color: '#991B1B', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
+          {errorMsg}
         </div>
       )}
-
       {scanError && !isConnected && !errorMsg && (
-        <div className="mb-6 p-4 bg-orange-50 text-orange-700 rounded-xl flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <p className="text-sm">{scanError}</p>
+        <div style={{ padding: '16px', background: '#FFF7ED', color: '#C2410C', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
+          {scanError}
         </div>
       )}
 
-      {!isConnected && status === 'idle' && (
-        <div className="flex flex-col gap-6">
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-             <div id="qr-reader" className="w-full border-none"></div>
-          </div>
+      <div className="work-grid">
+        <div>
+          <p className="desc desktop-only" style={{ marginBottom: '14px' }}>No camera handy? Type the 6-character code shown on the sender's screen instead.</p>
+          <button className="text-link" style={{ textAlign: 'left', margin: 0 }} onClick={() => setShowManual(!showManual)}>
+            Enter code manually
+          </button>
           
-          <div className="text-center">
-            <span className="text-sm text-gray-500 font-medium px-4 bg-gray-50 relative top-3">OR ENTER CODE</span>
-            <hr className="border-gray-200" />
+          <div className={`manual-entry ${showManual ? 'open' : ''}`} style={{ marginLeft: 0 }}>
+            <form onSubmit={handleManualJoin}>
+              <input 
+                type="text" 
+                maxLength={6} 
+                placeholder="A3F9K2" 
+                aria-label="Manual pairing code"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+              />
+              <button type="submit" className="primary-btn" disabled={manualCode.length < 6}>Connect</button>
+            </form>
           </div>
-
-          <form onSubmit={handleManualJoin} className="flex gap-2">
-            <input
-              type="text"
-              placeholder="6-digit code"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl uppercase tracking-widest font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-              maxLength={6}
-            />
-            <button
-              type="submit"
-              disabled={manualCode.length < 6}
-              className="px-6 py-3 bg-gray-900 text-white font-medium rounded-xl disabled:opacity-50"
-            >
-              Join
-            </button>
-          </form>
         </div>
-      )}
-
-      {status === 'connecting' && (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-           <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-           <p className="font-medium">Connecting to sender...</p>
-        </div>
-      )}
-
-      {isConnected && (
-        <div className="flex-1 flex flex-col">
-          {Object.keys(filesProgress).length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-gray-500 gap-4">
-              <div className="p-4 bg-gray-100 rounded-full">
-                <Download className="w-8 h-8 text-gray-400" />
-              </div>
-              <p className="font-medium">Waiting for sender to select files...</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-4">
-              <h2 className="font-semibold text-gray-900 border-b border-gray-100 pb-2">Received Files</h2>
-              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-                {(Object.values(filesProgress) as FileProgress[]).map((file) => (
-                  <div key={file.fileId} className="flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                        <FileIcon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {formatBytes(file.bytesTransferred)} / {formatBytes(file.size)}
-                        </p>
-                      </div>
-                      <div>
-                        {file.status === 'pending' && <span className="text-xs font-medium text-gray-400">Waiting</span>}
-                        {file.status === 'transferring' && <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />}
-                        {file.status === 'complete' && (
-                          <a 
-                            href={file.blobUrl} 
-                            download={file.name}
-                            className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
-                          >
-                            <Download className="w-4 h-4" />
-                            Save
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-300 ${file.status === 'complete' ? 'bg-green-500' : 'bg-blue-500'}`}
-                        style={{ width: `${Math.max(0, Math.min(100, (file.bytesTransferred / file.size) * 100))}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+        
+        <div className="panel">
+          {!isConnected && status === 'idle' && (
+            <div className="ring-stage small" style={{ zIndex: 1 }}>
+              <div className="ring"></div><div className="ring"></div><div className="ring"></div>
+              <div className="scan-frame">
+                <div id="qr-reader" style={{ width: '100%', height: '100%' }}></div>
+                <div className="corner tl"></div><div className="corner tr"></div>
+                <div className="corner bl"></div><div className="corner br"></div>
               </div>
             </div>
           )}
+          <div className="status-line">
+            <span className="pulse-dot"></span>
+            <span>
+              {status === 'connecting' ? 'Connecting to sender...' : 
+               isConnected ? 'Connected, waiting for files...' : 
+               'Searching for a code…'}
+            </span>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    </section>
   );
 }

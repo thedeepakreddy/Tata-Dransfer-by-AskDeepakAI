@@ -1,4 +1,3 @@
-import { Send, Scan } from 'lucide-react';
 import type { Screen } from '../App';
 
 interface HomeProps {
@@ -7,37 +6,51 @@ interface HomeProps {
 
 export function Home({ onSelectScreen }: HomeProps) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6 max-w-md mx-auto w-full">
-      <div className="text-center mb-12 animate-fade-in">
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900 mb-2">QuickShare</h1>
-        <p className="text-gray-500">Peer-to-peer file transfer</p>
-      </div>
-      
-      <div className="flex flex-col gap-4 w-full">
-        <button 
-          onClick={() => onSelectScreen('sender')}
-          className="group relative flex flex-col items-center justify-center gap-3 p-8 bg-blue-600 text-white rounded-2xl shadow-lg hover:bg-blue-700 active:scale-[0.98] transition-all"
-        >
-          <div className="bg-white/20 p-4 rounded-full group-hover:scale-110 transition-transform">
-            <Send className="w-8 h-8" />
+    <section className="screen active" id="home">
+      <div className="home-grid">
+        <div>
+          <p className="eyebrow">Local · No cloud · No signup</p>
+          <h1 className="brand" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
+            Tata Dransfer 
+            <span style={{ fontSize: '0.55em', fontWeight: '500', color: 'var(--muted)' }}>
+              by <a href="https://askdeepakai-datascientist.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#4169E1', textDecoration: 'none' }}>AskDeepakAI</a>
+            </span>
+          </h1>
+          <p className="sub">Send files device to device over WiFi. Nothing is ever stored on a server.</p>
+          <div className="role-buttons">
+            <button className="role-btn primary" onClick={() => onSelectScreen('sender')}>
+              <div><div className="label">Send</div><div className="hint">Pick files from this device</div></div>
+              <span className="arrow">→</span>
+            </button>
+            <button className="role-btn" onClick={() => onSelectScreen('receiver')}>
+              <div><div className="label">Scan</div><div className="hint">Receive from a nearby device</div></div>
+              <span className="arrow">→</span>
+            </button>
           </div>
-          <div className="text-xl font-semibold">Send Files</div>
-        </button>
-
-        <button 
-          onClick={() => onSelectScreen('receiver')}
-          className="group relative flex flex-col items-center justify-center gap-3 p-8 bg-white border-2 border-gray-200 text-gray-800 rounded-2xl shadow-sm hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] transition-all"
-        >
-          <div className="bg-gray-100 p-4 rounded-full group-hover:scale-110 transition-transform">
-            <Scan className="w-8 h-8" />
+          <div className="foot-note"><span className="dot"></span>Files travel directly over WiFi, never through the internet</div>
+        </div>
+        <div className="ring-stage">
+          <div className="ring"></div><div className="ring"></div><div className="ring"></div>
+          <div className="qr-core">
+            <svg viewBox="0 0 100 100" fill="none">
+              <rect x="8" y="8" width="26" height="26" rx="3" stroke="#F1F2F4" strokeWidth="6"/>
+              <rect x="66" y="8" width="26" height="26" rx="3" stroke="#F1F2F4" strokeWidth="6"/>
+              <rect x="8" y="66" width="26" height="26" rx="3" stroke="#F1F2F4" strokeWidth="6"/>
+              <rect x="17" y="17" width="8" height="8" fill="#F1F2F4"/>
+              <rect x="75" y="17" width="8" height="8" fill="#F1F2F4"/>
+              <rect x="17" y="75" width="8" height="8" fill="#F1F2F4"/>
+              <rect x="46" y="8" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="46" y="24" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="60" y="46" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="76" y="46" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="46" y="60" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="46" y="76" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="30" y="46" width="6" height="6" fill="#F1F2F4"/>
+              <rect x="46" y="46" width="6" height="6" fill="#F1F2F4"/>
+            </svg>
           </div>
-          <div className="text-xl font-semibold">Scan to Receive</div>
-        </button>
+        </div>
       </div>
-      
-      <div className="mt-12 text-sm text-gray-400 text-center px-4">
-        Files are transferred directly over your local WiFi network. No internet upload required.
-      </div>
-    </div>
+    </section>
   );
 }
