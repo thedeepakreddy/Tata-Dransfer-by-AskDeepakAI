@@ -1,0 +1,439 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
+
+export type Role = 'sender' | 'receiver' | null;
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
+export type ConnectionType = 'local' | 'relayed' | 'unknown';
+
+export interface FileMetadata {
+  type: 'meta';
+  fileId: string;
+  name: string;
+  size: number;
+  mimeType: string;
+}
+
+export interface FileProgress {
+  fileId: string;
+  name: string;
+  size: number;
+  bytesTransferred: number;
+  status: 'pending' | 'transferring' | 'complete' | 'error';
+  blobUrl?: string;
+}
+
+const CHUNK_SIZE = 16384; // 16 KB
+
+export function useWebRTC() {
+  const [role, setRole] = useState<Role>(null);
+  const [roomId, setRoomId] = useState<string>('');
+  const [status, setStatus] = useState<ConnectionState>('idle');
+  const [connectionType, setConnectionType] = useState<ConnectionType>('unknown');
+  const [filesProgress, setFilesProgress] = useState<Record<string, FileProgress>>({});
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const dcRef = useRef<RTCDataChannel | null>(null);
+  
+  // Refs for state accessed inside callbacks
+  const roomIdRef = useRef<string>('');
+  const roleRef = useRef<Role>(null);
+  const statusRef = useRef<ConnectionState>('idle');
+
+  // Sync refs
+  useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
+  useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { statusRef.current = status; }, [status]);
+  
+  // File transfer state
+  const sendQueueRef = useRef<File[]>([]);
+  const isSendingRef = useRef(false);
+  const receiveBufferRef = useRef<Record<string, { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata }>>({});
+
+  const getWsUrl = () => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/signaling`;
+  };
+
+  const initSignaling = useCallback((room: string, clientRole: Role) => {
+    setStatus('connecting');
+    setRole(clientRole);
+    setRoomId(room);
+    roomIdRef.current = room;
+    roleRef.current = clientRole;
+    statusRef.current = 'connecting';
+    
+    const ws = new WebSocket(getWsUrl());
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'join', roomId: room }));
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'ready') {
+          if (clientRole === 'sender') {
+            await startWebRTC();
+          }
+        } else if (msg.type === 'offer') {
+          await handleOffer(msg.payload);
+        } else if (msg.type === 'answer') {
+          await handleAnswer(msg.payload);
+        } else if (msg.type === 'ice-candidate') {
+          await handleIceCandidate(msg.payload);
+        } else if (msg.type === 'peer-disconnected') {
+          setStatus('disconnected');
+          setErrorMsg('Peer disconnected');
+        } else if (msg.type === 'error') {
+          setErrorMsg(msg.message);
+          setStatus('error');
+        }
+      } catch (err) {
+        console.error("Error parsing WS message", err);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setErrorMsg('Signaling server connection error. If you are in a preview iframe, please open the app in a new tab.');
+      setStatus('error');
+    };
+
+    ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
+      setStatus(prev => prev !== 'error' ? 'disconnected' : prev);
+    };
+  }, []);
+
+  const createPeerConnection = useCallback(() => {
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate && wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'ice-candidate',
+          roomId: roomIdRef.current,
+          payload: event.candidate,
+        }));
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('Connection state:', pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        setStatus('connected');
+        checkConnectionType(pc);
+      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        setStatus('disconnected');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        setErrorMsg('Connection failed. Try switching both devices to the same WiFi network.');
+        setStatus('error');
+      }
+    };
+
+    pcRef.current = pc;
+    return pc;
+  }, []);
+
+  const checkConnectionType = async (pc: RTCPeerConnection) => {
+    try {
+      const stats = await pc.getStats();
+      let type: ConnectionType = 'unknown';
+      stats.forEach((report) => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          const localCandidate = stats.get(report.localCandidateId);
+          if (localCandidate) {
+            type = localCandidate.candidateType === 'host' ? 'local' : 'relayed';
+          }
+        }
+      });
+      setConnectionType(type);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const startWebRTC = async () => {
+    const pc = createPeerConnection();
+    
+    // Create DataChannel (Sender)
+    const dc = pc.createDataChannel('fileTransfer', { ordered: true });
+    setupDataChannel(dc);
+    
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    
+    wsRef.current?.send(JSON.stringify({
+      type: 'offer',
+      roomId: roomIdRef.current,
+      payload: offer
+    }));
+  };
+
+  const handleOffer = async (offer: RTCSessionDescriptionInit) => {
+    const pc = createPeerConnection();
+    
+    pc.ondatachannel = (event) => {
+      setupDataChannel(event.channel);
+    };
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    wsRef.current?.send(JSON.stringify({
+      type: 'answer',
+      roomId: roomIdRef.current,
+      payload: answer
+    }));
+  };
+
+  const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
+    if (pcRef.current) {
+      await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+    }
+  };
+
+  const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
+    if (pcRef.current) {
+      try {
+        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.error('Error adding received ice candidate', e);
+      }
+    }
+  };
+
+  const setupDataChannel = (dc: RTCDataChannel) => {
+    dc.binaryType = 'arraybuffer';
+    
+    dc.onopen = () => {
+      setStatus('connected');
+      if (roleRef.current === 'sender' && sendQueueRef.current.length > 0) {
+        processSendQueue();
+      }
+    };
+
+    dc.onclose = () => {
+      console.log('Data channel closed');
+    };
+
+    dc.onmessage = async (event) => {
+      if (typeof event.data === 'string') {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'meta') {
+          handleFileMetadata(msg);
+        } else if (msg.type === 'eof') {
+          handleFileEof(msg);
+        }
+      } else {
+        handleFileChunk(event.data);
+      }
+    };
+
+    dcRef.current = dc;
+  };
+
+  const handleFileMetadata = (meta: FileMetadata) => {
+    setStatus('transferring');
+    receiveBufferRef.current[meta.fileId] = {
+      chunks: [],
+      receivedBytes: 0,
+      meta
+    };
+    setFilesProgress(prev => ({
+      ...prev,
+      [meta.fileId]: {
+        fileId: meta.fileId,
+        name: meta.name,
+        size: meta.size,
+        bytesTransferred: 0,
+        status: 'transferring'
+      }
+    }));
+  };
+
+  const handleFileChunk = (data: ArrayBuffer) => {
+    // Find the current active file
+    const activeFileId = Object.keys(receiveBufferRef.current).find(
+      id => receiveBufferRef.current[id].receivedBytes < receiveBufferRef.current[id].meta.size
+    );
+    
+    if (activeFileId) {
+      const fileBuffer = receiveBufferRef.current[activeFileId];
+      fileBuffer.chunks.push(data);
+      fileBuffer.receivedBytes += data.byteLength;
+      
+      setFilesProgress(prev => ({
+        ...prev,
+        [activeFileId]: {
+          ...prev[activeFileId],
+          bytesTransferred: fileBuffer.receivedBytes
+        }
+      }));
+    }
+  };
+
+  const handleFileEof = (msg: { type: 'eof', fileId: string }) => {
+    const fileBuffer = receiveBufferRef.current[msg.fileId];
+    if (fileBuffer) {
+      const blob = new Blob(fileBuffer.chunks, { type: fileBuffer.meta.mimeType });
+      const url = URL.createObjectURL(blob);
+      
+      setFilesProgress(prev => ({
+        ...prev,
+        [msg.fileId]: {
+          ...prev[msg.fileId],
+          status: 'complete',
+          blobUrl: url
+        }
+      }));
+
+      // Auto download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileBuffer.meta.name;
+      a.click();
+      
+      // Cleanup buffer but keep url for preview if needed
+      delete receiveBufferRef.current[msg.fileId];
+      
+      // Check if all files complete
+      if (Object.keys(receiveBufferRef.current).length === 0) {
+         setStatus('complete');
+      }
+    }
+  };
+
+  const sendFiles = useCallback((files: File[]) => {
+    sendQueueRef.current.push(...files);
+    
+    files.forEach(file => {
+      const fileId = uuidv4();
+      (file as any)._fileId = fileId; // Attach temporary ID
+      setFilesProgress(prev => ({
+        ...prev,
+        [fileId]: {
+          fileId,
+          name: file.name,
+          size: file.size,
+          bytesTransferred: 0,
+          status: 'pending'
+        }
+      }));
+    });
+
+    if (dcRef.current?.readyState === 'open' && !isSendingRef.current) {
+      processSendQueue();
+    }
+  }, []);
+
+  const processSendQueue = async () => {
+    if (sendQueueRef.current.length === 0) {
+      isSendingRef.current = false;
+      setStatus('complete');
+      return;
+    }
+
+    isSendingRef.current = true;
+    setStatus('transferring');
+    const file = sendQueueRef.current.shift()!;
+    const fileId = (file as any)._fileId;
+    
+    const dc = dcRef.current!;
+    
+    // Send meta
+    const meta: FileMetadata = {
+      type: 'meta',
+      fileId,
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream'
+    };
+    dc.send(JSON.stringify(meta));
+    
+    setFilesProgress(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], status: 'transferring' }
+    }));
+
+    // Read and send chunks
+    const reader = file.stream().getReader();
+    let bytesSent = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      let offset = 0;
+      while (offset < value.length) {
+        const chunk = value.slice(offset, offset + CHUNK_SIZE);
+        
+        // Backpressure handling
+        while (dc.bufferedAmount > 1024 * 1024) { // 1MB buffer limit
+          await new Promise(resolve => {
+            const onLow = () => {
+              dc.removeEventListener('bufferedamountlow', onLow);
+              resolve(null);
+            };
+            dc.addEventListener('bufferedamountlow', onLow);
+          });
+        }
+
+        dc.send(chunk);
+        bytesSent += chunk.length;
+        offset += CHUNK_SIZE;
+        
+        // Update progress occasionally to avoid too many re-renders
+        if (bytesSent % (CHUNK_SIZE * 10) === 0 || bytesSent === file.size) {
+           setFilesProgress(prev => ({
+             ...prev,
+             [fileId]: { ...prev[fileId], bytesTransferred: bytesSent }
+           }));
+        }
+      }
+    }
+
+    // Send EOF
+    dc.send(JSON.stringify({ type: 'eof', fileId }));
+    setFilesProgress(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], status: 'complete' }
+    }));
+
+    // Proceed to next file
+    processSendQueue();
+  };
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) wsRef.current.close();
+    if (dcRef.current) dcRef.current.close();
+    if (pcRef.current) pcRef.current.close();
+    setStatus('idle');
+    setRole(null);
+    setRoomId('');
+    setFilesProgress({});
+    setErrorMsg(null);
+  }, []);
+
+  return {
+    role,
+    roomId,
+    status,
+    connectionType,
+    filesProgress,
+    errorMsg,
+    initSignaling,
+    sendFiles,
+    disconnect
+  };
+}
