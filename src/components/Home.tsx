@@ -22,12 +22,12 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
     .then(url => setQrUrl(url))
     .catch(console.error);
     
-    // Fetch geo location
-    fetch('https://get.geojs.io/v1/ip/geo.json')
+    // Fetch geo location from backend to protect API key
+    fetch('/api/location')
       .then(res => res.json())
       .then(data => {
         if (data && data.city) {
-          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.country });
+          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.region });
         } else {
           setGeoInfo({ ip: 'Local', city: 'Unknown', region: 'Location' });
         }
