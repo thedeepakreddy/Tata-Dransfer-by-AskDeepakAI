@@ -52,8 +52,7 @@ export function useWebRTC() {
   const receiveBufferRef = useRef<Record<string, { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata }>>({});
 
   const getWsUrl = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/signaling`;
+    return 'wss://tata-dransfer-by-askdeepakai.onrender.com';
   };
 
   const initSignaling = useCallback((room: string, clientRole: Role) => {
