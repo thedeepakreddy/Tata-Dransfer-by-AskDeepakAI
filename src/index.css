@@ -87,26 +87,12 @@ body {
 /* App Container (Responsive) */
 .app-container {
   background: var(--surface);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 1px 2px rgba(20,24,28,0.04), 0 40px 80px -30px rgba(20,24,28,0.20), 0 0 0 1px var(--hairline);
   overflow: hidden;
   position: relative;
   display: flex;
   flex-direction: column;
-  
-  /* Desktop defaults */
-  width: 1100px;
-  max-width: 96vw;
-}
-
-@media (max-width: 767px) {
-  .app-container {
-    width: 100%;
-    max-width: 100%;
-    height: 100dvh;
-    border-radius: 0;
-    box-shadow: none;
-  }
+  width: 100%;
+  height: 100dvh;
 }
 
 /* Titlebar / Statusbar */
