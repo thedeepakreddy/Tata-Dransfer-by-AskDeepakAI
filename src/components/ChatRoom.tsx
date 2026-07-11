@@ -1,28 +1,35 @@
 import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
-import { useWebRTC, ChatMessage, Role, FileProgress } from '../lib/useWebRTC';
+import { useWebRTC, ChatMessage } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
-import { Lock, Plus, Send, File as FileIcon, CheckCircle } from 'lucide-react';
 
-interface ChatRoomProps {
-  hook: ReturnType<typeof useWebRTC>;
-  onBack: () => void;
-}
-
-export function ChatRoom({ hook, onBack }: ChatRoomProps) {
+export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>, onBack: () => void }) {
   const { messages, filesProgress, sendChatMessage, sendFiles, role, disconnect, status, connectionType } = hook;
   const [inputText, setInputText] = useState('');
+  const [isTrayOpen, setIsTrayOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, filesProgress]);
 
-  const handleSend = (e: FormEvent) => {
-    e.preventDefault();
+  const handleSend = () => {
     if (inputText.trim()) {
       sendChatMessage(inputText.trim());
       setInputText('');
+    }
+  };
+
+  const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setInputText(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = Math.min(e.target.scrollHeight, 90) + 'px';
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
@@ -30,77 +37,104 @@ export function ChatRoom({ hook, onBack }: ChatRoomProps) {
     if (e.target.files && e.target.files.length > 0) {
       sendFiles(Array.from(e.target.files));
       e.target.value = '';
+      setIsTrayOpen(false);
     }
   };
 
-  const handleDisconnect = () => {
-    disconnect();
-    onBack();
+  const triggerFileSelect = (accept?: string) => {
+    if (fileInputRef.current) {
+      if (accept) {
+        fileInputRef.current.accept = accept;
+      } else {
+        fileInputRef.current.removeAttribute('accept');
+      }
+      fileInputRef.current.click();
+    }
   };
 
   return (
-    <div className="chat-container">
-      {/* Header */}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--paper)', backgroundImage: 'radial-gradient(circle at 50% 0%, #F7F8FA 0%, var(--paper) 60%)' }}>
+      
+      {/* chat header */}
       <div className="chat-header">
-        <button className="header-back" onClick={handleDisconnect} title="Disconnect and Go Back">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-        </button>
-        <div className="chat-title-group">
-          <h2 className="title" style={{ margin: 0 }}>Secure Session</h2>
-          <div className="chat-subtitle">
-            <Lock size={12} className="lock-icon" />
-            End-to-End Encrypted &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'}
+        <button className="back-btn" aria-label="Back" onClick={() => { disconnect(); onBack(); }}>←</button>
+        <div className="peer-avatar">P2</div>
+        <div className="peer-meta">
+          <div className="peer-name">{role === 'sender' ? 'Receiver' : 'Sender'} Device</div>
+          <div className="peer-status">
+            {status === 'disconnected' ? (
+              <span style={{ color: '#E11D48' }}>Disconnected</span>
+            ) : (
+              <>
+                <span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'}
+              </>
+            )}
           </div>
         </div>
+        <button className="header-icon-btn" aria-label="Session info">i</button>
       </div>
 
-      {/* Messages Area */}
-      <div className="chat-messages">
-        <div className="chat-welcome">
-          <Lock size={32} strokeWidth={1.5} style={{ marginBottom: '12px', color: 'var(--signal)' }} />
-          <h3>Connection Established</h3>
-          <p>Messages and files are sent directly between devices. No data is stored on any server.</p>
-        </div>
+      <div className="thread" id="thread">
+        <div className="day-divider"><span>Secure Session</span></div>
+        <div className="conn-note"><span className="dot"></span>End-to-End Encrypted</div>
 
         {messages.map((msg: ChatMessage) => {
           const isMe = msg.senderRole === role;
-          
+          const rowClass = `row ${isMe ? 'out' : 'in'}`;
+          const timeString = new Date(msg.timestamp).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+
           if (msg.fileId) {
             const file = filesProgress[msg.fileId];
             if (!file) return null;
+
+            let iconText = 'DOC';
+            if (file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)) iconText = 'IMG';
+            else if (file.name.match(/\.(mp4|mov|webm)$/i)) iconText = 'VID';
+            else if (file.name.match(/\.(mp3|wav|m4a)$/i)) iconText = 'AUD';
+
+            const pct = Math.max(0, Math.min(100, (file.bytesTransferred / file.size) * 100));
+            const dashOffset = 69.1 - (69.1 * pct / 100);
+
             return (
-              <div key={msg.id} className={`chat-bubble-row ${isMe ? 'me' : 'them'}`}>
-                <div className={`chat-file-bubble ${isMe ? 'me' : 'them'}`}>
-                  <div className="file-info-row">
-                    <FileIcon size={24} className="file-icon" />
-                    <div className="file-meta">
-                      <span className="file-name">{file.name}</span>
-                      <span className="file-size">{formatBytes(file.size)}</span>
+              <div key={msg.id} className={rowClass}>
+                <div className="bubble-group">
+                  <div className="file-bubble" onClick={() => {
+                     if(file.status === 'complete' && file.blobUrl) {
+                        const a = document.createElement('a');
+                        a.href = file.blobUrl;
+                        a.download = file.name;
+                        a.click();
+                     }
+                  }} style={{ cursor: file.status === 'complete' ? 'pointer' : 'default' }}>
+                    <div className="file-icon">{iconText}</div>
+                    <div className="file-info">
+                      <div className="file-name">{file.name}</div>
+                      <div className="file-sub">
+                        {formatBytes(file.size)} &middot; {file.status === 'complete' ? 'sent' : `sending — ${Math.round(pct)}%`}
+                      </div>
                     </div>
+                    {file.status === 'complete' ? (
+                      <div className="file-check">✓</div>
+                    ) : (
+                      <div className="file-progress-ring">
+                        <svg viewBox="0 0 26 26">
+                          <circle className="ring-track" cx="13" cy="13" r="11"></circle>
+                          <circle className="ring-fill" cx="13" cy="13" r="11" strokeDasharray="69.1" strokeDashoffset={dashOffset}></circle>
+                        </svg>
+                      </div>
+                    )}
                   </div>
-                  
-                  {file.status === 'complete' ? (
-                    <div className="file-action">
-                       {file.blobUrl ? (
-                         <a href={file.blobUrl} download={file.name} className="download-btn">Open File</a>
-                       ) : (
-                         <span className="check-text"><CheckCircle size={16}/> Sent</span>
-                       )}
-                    </div>
-                  ) : (
-                    <div className="chat-progress-wrap">
-                      <div className="chat-progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
-                    </div>
-                  )}
+                  <div className="msg-time">{file.status === 'complete' ? timeString : 'Transferring…'}</div>
                 </div>
               </div>
             );
           }
 
           return (
-            <div key={msg.id} className={`chat-bubble-row ${isMe ? 'me' : 'them'}`}>
-              <div className={`chat-bubble ${isMe ? 'me' : 'them'}`}>
-                {msg.text}
+            <div key={msg.id} className={rowClass}>
+              <div className="bubble-group">
+                <div className="bubble">{msg.text}</div>
+                <div className="msg-time">{timeString}</div>
               </div>
             </div>
           );
@@ -108,38 +142,35 @@ export function ChatRoom({ hook, onBack }: ChatRoomProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      {status === 'disconnected' ? (
-        <div className="chat-disconnected-bar">
-          Peer disconnected. <button onClick={handleDisconnect} className="text-link" style={{display:'inline', margin:0}}>Return Home</button>
+      <div className="composer">
+        <input 
+          type="file" 
+          multiple 
+          style={{ display: 'none' }}
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+        />
+        <div className={`attach-tray ${isTrayOpen ? 'open' : ''}`} id="attachTray">
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('image/*')}><div className="ic">IMG</div><span>Photo</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('.pdf,.doc,.docx,.txt')}><div className="ic">DOC</div><span>File</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('audio/*')}><div className="ic">AUD</div><span>Audio</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('video/*')}><div className="ic">VID</div><span>Video</span></button>
         </div>
-      ) : (
-        <div className="chat-input-area">
-          <input 
-            type="file" 
-            multiple 
-            className="hidden" 
-            style={{ display: 'none' }}
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-          />
-          <button className="chat-attach-btn" type="button" onClick={() => fileInputRef.current?.click()} title="Send files">
-            <Plus size={24} />
-          </button>
-          <form onSubmit={handleSend} className="chat-form">
-            <input 
-              type="text" 
-              className="chat-input"
-              placeholder="Type a message..." 
+        <div className="composer-row">
+          <button type="button" className={`plus-btn ${isTrayOpen ? 'open' : ''}`} onClick={() => setIsTrayOpen(!isTrayOpen)}>+</button>
+          <div className="input-wrap">
+            <textarea 
+              className="msg-input" 
+              rows={1} 
+              placeholder="Message" 
               value={inputText}
-              onChange={e => setInputText(e.target.value)}
+              onChange={handleInput}
+              onKeyDown={onKeyDown}
             />
-            <button type="submit" className="chat-send-btn" disabled={!inputText.trim()}>
-              <Send size={20} />
-            </button>
-          </form>
+          </div>
+          <button type="button" className="send-btn" disabled={!inputText.trim() || status !== 'connected'} onClick={handleSend}>➤</button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
