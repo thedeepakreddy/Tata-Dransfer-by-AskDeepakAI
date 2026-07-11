@@ -1,19 +1,28 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Tata Dransfer
+By AskDeepakAI
 
-# Run and deploy your AI Studio app
+Tata Dransfer is a lightning-fast, highly secure peer-to-peer file transfer and chat application. It allows devices on the same local network or across the internet to connect via WebRTC, enabling direct, end-to-end encrypted file sharing and messaging without any data ever touching a central server.
 
-This contains everything you need to run your app locally.
-https://ai.studio/apps/5f9b5ea6-80fd-45b1-ab13-70eb0664eba7
+## Features
+- **End-to-End Encrypted (E2EE):** True WebRTC DTLS/SRTP encryption.
+- **Local WiFi Transfer:** Directly transfer gigabytes of data between devices in seconds.
+- **Unified Chat Room:** Seamlessly chat and transfer files in a sleek, modern, glassmorphic UI.
+- **Cross-Platform:** Works entirely in the browser on mobile, desktop, iOS, and Android.
 
-## Run Locally
+## Setup & Deployment
 
-**Prerequisites:**  Node.js
+### Frontend (React/Vite)
+To run the frontend locally:
+```bash
+npm install
+npm run dev
+```
 
+### Backend (Signaling Server)
+The signaling server establishes the initial peer connection before stepping out of the way. It is built in Node.js using WebSockets.
+```bash
+node signaling-server.js
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Privacy & Security
+All files travel *directly* from device A to device B. There is no cloud storage, no file limits, and absolutely no tracking.
