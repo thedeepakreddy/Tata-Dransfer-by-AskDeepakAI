@@ -224,12 +224,18 @@ export function useWebRTC() {
   const setupDataChannel = (dc: RTCDataChannel) => {
     dc.binaryType = 'arraybuffer';
     
-    dc.onopen = () => {
+    const handleOpen = () => {
       setStatus('connected');
       if (roleRef.current === 'sender' && sendQueueRef.current.length > 0) {
         processSendQueue();
       }
     };
+
+    if (dc.readyState === 'open') {
+      handleOpen();
+    } else {
+      dc.onopen = handleOpen;
+    }
 
     dc.onclose = () => {
       console.log('Data channel closed');
