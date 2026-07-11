@@ -13,8 +13,13 @@ export type Screen = 'home' | 'sender' | 'receiver';
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [userName, setUserName] = useState<string>('');
-
   const [timeStr, setTimeStr] = useState<string>('');
+  const [showLoader, setShowLoader] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowLoader(false), 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const updateClock = () => {
@@ -33,7 +38,13 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-container">
+    <>
+      {showLoader && (
+        <div className="loader-screen">
+          <div className="loader-text">AskDeepak<span>AI</span></div>
+        </div>
+      )}
+      <div className="app-container">
       <div className="titlebar">
         <a href="https://askdeepakai-datascientist.onrender.com/" target="_blank" rel="noopener noreferrer" className="url-pill" style={{ textDecoration: 'none', color: 'inherit' }}>
           <span>AskDeepakAI</span>
@@ -49,6 +60,6 @@ export default function App() {
           setScreen('home');
         }} userName={userName} />}
       </div>
-    </div>
+    </>
   );
 }
