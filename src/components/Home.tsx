@@ -10,6 +10,8 @@ interface HomeProps {
 
 export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [geoInfo, setGeoInfo] = useState<{ip: string, city: string, region: string} | null>(null);
+  const [timeStr, setTimeStr] = useState<string>('');
 
   useEffect(() => {
     QRCode.toDataURL('https://tata-dransfer-by-askdeepakai-1.onrender.com', { 
@@ -19,10 +21,59 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
     })
     .then(url => setQrUrl(url))
     .catch(console.error);
+    
+    // Fetch geo IP
+    fetch('https://ipapi.co/json/')
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.ip) {
+          setGeoInfo({ ip: data.ip, city: data.city, region: data.region });
+        }
+      })
+      .catch(console.error);
+
+    // Update time clock
+    const updateClock = () => {
+      setTimeStr(new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true }));
+    };
+    updateClock();
+    const timer = setInterval(updateClock, 1000);
+    
+    return () => clearInterval(timer);
   }, []);
 
   return (
-    <section className="screen active" id="home">
+    <section className="screen active" id="home" style={{ position: 'relative' }}>
+      {/* Top right time and IP widget */}
+      <div style={{
+        position: 'absolute',
+        top: '24px',
+        right: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: '11px',
+        color: 'var(--muted)',
+        background: 'rgba(255, 255, 255, 0.6)',
+        backdropFilter: 'blur(10px)',
+        padding: '8px 12px',
+        borderRadius: '8px',
+        border: '1px solid var(--hairline)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+        zIndex: 100
+      }}>
+        <div style={{ color: 'var(--ink)', fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
+        {geoInfo ? (
+          <>
+            <div>{geoInfo.ip}</div>
+            <div>{geoInfo.city}, {geoInfo.region}</div>
+          </>
+        ) : (
+          <div>Locating...</div>
+        )}
+      </div>
+
       <div className="home-grid">
         <div>
           <p className="eyebrow">Local · No cloud · No signup</p>
