@@ -3,9 +3,9 @@
 // Start command: node signaling-server.js
 // Make sure package.json has: "dependencies": { "ws": "^8.16.0" }
 
-const WebSocket = require('ws');
+import { WebSocketServer, WebSocket } from 'ws';
 const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
+const wss = new WebSocketServer({ port: PORT });
 
 // roomId -> Set<ws>
 const rooms = new Map();
