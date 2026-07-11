@@ -168,7 +168,7 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
               onKeyDown={onKeyDown}
             />
           </div>
-          <button type="button" className="send-btn" disabled={!inputText.trim() || status !== 'connected'} onClick={handleSend}>➤</button>
+          <button type="button" className="send-btn" disabled={!inputText.trim() || !['connected', 'transferring', 'complete'].includes(status)} onClick={handleSend}>➤</button>
         </div>
       </div>
     </div>
