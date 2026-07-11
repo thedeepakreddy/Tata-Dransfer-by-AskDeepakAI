@@ -10,7 +10,6 @@ interface HomeProps {
 
 export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
-  const [geoInfo, setGeoInfo] = useState<{ip: string, city: string, region: string} | null>(null);
   const [timeStr, setTimeStr] = useState<string>('');
 
   useEffect(() => {
@@ -21,21 +20,6 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
     })
     .then(url => setQrUrl(url))
     .catch(console.error);
-    
-    // Fetch geo location from backend to protect API key
-    fetch('/api/location')
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.city) {
-          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.region });
-        } else {
-          setGeoInfo({ ip: 'Local', city: 'Unknown', region: 'Location' });
-        }
-      })
-      .catch((err) => {
-        console.error(err);
-        setGeoInfo({ ip: 'Local', city: 'Unknown', region: 'Location' });
-      });
 
     // Update time clock
     const updateClock = () => {
@@ -63,9 +47,6 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
         zIndex: 100
       }}>
         <div style={{ color: 'var(--ink)', fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
-        {geoInfo && (
-          <div>{geoInfo.city}, {geoInfo.region}</div>
-        )}
       </div>
 
       <div className="home-grid">

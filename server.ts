@@ -12,31 +12,7 @@ async function startServer() {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true });
 
-  // Proxy endpoint for IP Geolocation using free API
-  app.get('/api/location', async (req, res) => {
-    try {
-      // Get client's true IP in Render
-      let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-      if (Array.isArray(ip)) ip = ip[0];
-      if (ip.includes(',')) ip = ip.split(',')[0];
-      
-      // If testing locally (localhost), use empty string so the API detects public IP
-      if (ip === '::1' || ip === '127.0.0.1' || ip.includes('localhost')) {
-        ip = ''; 
-      }
 
-      const resp = await fetch(`https://get.geojs.io/v1/ip/geo.json?ip=${ip}`);
-      const data = await resp.json();
-      
-      return res.json({ 
-        city: data.city || 'Unknown', 
-        region: data.country || 'Location' 
-      });
-    } catch (err) {
-      console.error('Error fetching location:', err);
-      return res.json({ city: 'Unknown', region: 'Location' });
-    }
-  });
 
   server.on("upgrade", (request, socket, head) => {
     try {
