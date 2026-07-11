@@ -59,7 +59,7 @@ export function Sender({ onBack, userName }: SenderProps) {
         </button>
         <h2 className="title" style={{ margin: 0, marginLeft: '8px' }}>Choose what to send</h2>
       </div>
-      <p className="desc" style={{ marginLeft: '40px' }}>Photos, videos, music, PDFs, or documents.</p>
+      <p className="desc" style={{ marginLeft: '40px' }}>choose photos, videos, pdf, music, any file.</p>
 
       {errorMsg && (
         <div style={{ padding: '16px', background: '#FEF2F2', color: '#991B1B', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
@@ -68,6 +68,38 @@ export function Sender({ onBack, userName }: SenderProps) {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', maxWidth: '400px', margin: '0 auto' }}>
+        <div style={{ width: '100%' }}>
+          <input 
+            type="file" 
+            multiple 
+            className="hidden" 
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+          />
+          <button className="picker-btn" onClick={() => fileInputRef.current?.click()}>
+            + Add files
+          </button>
+          
+          <div id="fileList">
+            {(Object.values(filesProgress) as FileProgress[]).map((file) => (
+              <div key={file.fileId} className="file-chip">
+                <div className="meta">
+                  <span className="name">{file.name}</span>
+                  <span className="size">{formatBytes(file.size)}</span>
+                </div>
+                {file.status === 'pending' && <div className="progress-wrap"><div className="progress-fill" style={{ width: '0%' }}></div></div>}
+                {file.status === 'transferring' && (
+                  <div className="progress-wrap">
+                    <div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
+                  </div>
+                )}
+                {file.status === 'complete' && <span className="check">Done</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="panel" style={{ width: '100%' }}>
           {!isConnected && (
             <div className="ring-stage">
@@ -114,39 +146,6 @@ export function Sender({ onBack, userName }: SenderProps) {
               </div>
             </div>
           )}
-        </div>
-
-        <div style={{ width: '100%' }}>
-          <p className="panel-label" style={{ marginBottom: '16px', textAlign: 'center' }}>Or select files to queue before connecting:</p>
-          <input 
-            type="file" 
-            multiple 
-            className="hidden" 
-            style={{ display: 'none' }}
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-          />
-          <button className="picker-btn" onClick={() => fileInputRef.current?.click()}>
-            + Add files
-          </button>
-          
-          <div id="fileList">
-            {(Object.values(filesProgress) as FileProgress[]).map((file) => (
-              <div key={file.fileId} className="file-chip">
-                <div className="meta">
-                  <span className="name">{file.name}</span>
-                  <span className="size">{formatBytes(file.size)}</span>
-                </div>
-                {file.status === 'pending' && <div className="progress-wrap"><div className="progress-fill" style={{ width: '0%' }}></div></div>}
-                {file.status === 'transferring' && (
-                  <div className="progress-wrap">
-                    <div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
-                  </div>
-                )}
-                {file.status === 'complete' && <span className="check">Done</span>}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </section>
