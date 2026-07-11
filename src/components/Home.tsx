@@ -129,10 +129,8 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
       </div>
 
       <div style={{
-        position: 'absolute',
-        bottom: '16px',
-        left: '0',
-        right: '0',
+        marginTop: 'auto',
+        padding: '32px 0 24px',
         textAlign: 'center',
         fontSize: '12.5px',
         color: 'var(--muted)',
