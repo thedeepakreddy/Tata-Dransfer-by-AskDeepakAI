@@ -3,6 +3,8 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useWebRTC, FileProgress } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
 
+import { ChatRoom } from './ChatRoom';
+
 interface ReceiverProps {
   onBack: () => void;
 }
@@ -12,7 +14,8 @@ export function Receiver({ onBack }: ReceiverProps) {
   const [manualCode, setManualCode] = useState('');
   const [showManual, setShowManual] = useState(false);
   
-  const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = useWebRTC();
+  const hook = useWebRTC();
+  const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = hook;
 
   useEffect(() => {
     if (status !== 'idle') return;
@@ -76,74 +79,10 @@ export function Receiver({ onBack }: ReceiverProps) {
     }
   };
 
-  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete';
-  const receivedFiles = Object.values(filesProgress) as FileProgress[];
-  const hasFiles = receivedFiles.length > 0;
-  const totalBytes = receivedFiles.reduce((acc, f) => acc + f.size, 0);
+  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected';
 
-  if (hasFiles) {
-    return (
-      <section className="screen active" id="done">
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-          <button className="header-back" onClick={onBack}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          <h2 className="title" style={{ margin: 0, marginLeft: '8px' }}>
-            {receivedFiles.length} {receivedFiles.length === 1 ? 'file' : 'files'} received
-          </h2>
-        </div>
-        <p className="desc" style={{ marginLeft: '40px' }}>Saved directly to this device.</p>
-
-        <div className="summary-pill">
-          <div><div className="big">{formatBytes(totalBytes)}</div><div className="small">TOTAL TRANSFERRED</div></div>
-          <div className="right"><div className="big">{status === 'transferring' ? '...' : 'Done'}</div><div className="small">{connectionType === 'local' ? 'LOCAL WIFI ⚡' : 'RELAYED 🌐'}</div></div>
-        </div>
-
-        {/* Mobile View */}
-        <div className="mobile-only">
-          {receivedFiles.map((file) => (
-            <div key={file.fileId} className="file-chip">
-              <div className="meta">
-                <span className="name">{file.name}</span>
-                <span className="size">{formatBytes(file.size)}</span>
-              </div>
-              {file.status === 'complete' && (
-                <a href={file.blobUrl} download={file.name} style={{ textDecoration: 'none' }}>
-                  <span className="check" style={{ cursor: 'pointer' }}>✓</span>
-                </a>
-              )}
-              {file.status !== 'complete' && (
-                <div className="progress-wrap"><div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div></div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Desktop View */}
-        <table className="file-table desktop-only">
-          <thead><tr><th>File</th><th>Size</th><th></th></tr></thead>
-          <tbody>
-            {receivedFiles.map((file) => (
-              <tr key={file.fileId}>
-                <td>{file.name}</td>
-                <td className="size">{formatBytes(file.size)}</td>
-                <td className="check">
-                  {file.status === 'complete' ? (
-                    <a href={file.blobUrl} download={file.name} style={{ textDecoration: 'none', color: 'inherit' }}>
-                      <span style={{ cursor: 'pointer' }}>✓</span>
-                    </a>
-                  ) : (
-                    <span style={{ color: 'var(--muted)', fontSize: '12px' }}>{Math.round((file.bytesTransferred / file.size) * 100)}%</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <button className="secondary-btn" onClick={onBack}>Send something back</button>
-      </section>
-    );
+  if (isConnected) {
+    return <ChatRoom hook={hook} onBack={onBack} />;
   }
 
   return (

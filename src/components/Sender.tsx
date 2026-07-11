@@ -4,6 +4,8 @@ import { useWebRTC, FileProgress } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 
+import { ChatRoom } from './ChatRoom';
+
 interface SenderProps {
   onBack: () => void;
 }
@@ -13,7 +15,8 @@ export function Sender({ onBack }: SenderProps) {
   const [showQrCode, setShowQrCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const { initSignaling, roomId, status, sendFiles, filesProgress, errorMsg, connectionType, disconnect } = useWebRTC();
+  const hook = useWebRTC();
+  const { initSignaling, roomId, status, sendFiles, filesProgress, errorMsg, connectionType, disconnect } = hook;
 
   useEffect(() => {
     const newRoomId = uuidv4().substring(0, 6).toUpperCase();
@@ -37,13 +40,16 @@ export function Sender({ onBack }: SenderProps) {
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       sendFiles(Array.from(e.target.files));
-      // Reset input value so same files can be selected again if needed
       e.target.value = '';
     }
   };
 
-  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete';
+  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected';
   const hasFiles = Object.keys(filesProgress).length > 0;
+
+  if (isConnected && showQrCode) {
+    return <ChatRoom hook={hook} onBack={onBack} />;
+  }
 
   return (
     <section className="screen active" id="send">

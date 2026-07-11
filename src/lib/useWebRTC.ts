@@ -22,6 +22,14 @@ export interface FileProgress {
   blobUrl?: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  senderRole: Role;
+  text?: string;
+  fileId?: string;
+  timestamp: number;
+}
+
 const CHUNK_SIZE = 16384; // 16 KB
 
 export function useWebRTC() {
@@ -30,6 +38,7 @@ export function useWebRTC() {
   const [status, setStatus] = useState<ConnectionState>('idle');
   const [connectionType, setConnectionType] = useState<ConnectionType>('unknown');
   const [filesProgress, setFilesProgress] = useState<Record<string, FileProgress>>({});
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -233,6 +242,13 @@ export function useWebRTC() {
           handleFileMetadata(msg);
         } else if (msg.type === 'eof') {
           handleFileEof(msg);
+        } else if (msg.type === 'chat') {
+          setMessages(prev => [...prev, {
+            id: msg.id,
+            senderRole: roleRef.current === 'sender' ? 'receiver' : 'sender',
+            text: msg.text,
+            timestamp: msg.timestamp
+          }]);
         }
       } else {
         handleFileChunk(event.data);
@@ -259,6 +275,12 @@ export function useWebRTC() {
         status: 'transferring'
       }
     }));
+    setMessages(prev => [...prev, {
+      id: uuidv4(),
+      senderRole: roleRef.current === 'sender' ? 'receiver' : 'sender',
+      fileId: meta.fileId,
+      timestamp: Date.now()
+    }]);
   };
 
   const handleFileChunk = (data: ArrayBuffer) => {
@@ -329,6 +351,12 @@ export function useWebRTC() {
           status: 'pending'
         }
       }));
+      setMessages(prev => [...prev, {
+        id: uuidv4(),
+        senderRole: roleRef.current,
+        fileId: fileId,
+        timestamp: Date.now()
+      }]);
     });
 
     if (dcRef.current?.readyState === 'open' && !isSendingRef.current) {
@@ -413,6 +441,21 @@ export function useWebRTC() {
     processSendQueue();
   };
 
+  const sendChatMessage = useCallback((text: string) => {
+    const msgId = uuidv4();
+    const chatMsg = { type: 'chat', id: msgId, text, timestamp: Date.now() };
+    if (dcRef.current?.readyState === 'open') {
+      dcRef.current.send(JSON.stringify(chatMsg));
+    }
+    
+    setMessages(prev => [...prev, {
+      id: msgId,
+      senderRole: roleRef.current,
+      text,
+      timestamp: chatMsg.timestamp
+    }]);
+  }, []);
+
   const disconnect = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     if (dcRef.current) dcRef.current.close();
@@ -421,6 +464,7 @@ export function useWebRTC() {
     setRole(null);
     setRoomId('');
     setFilesProgress({});
+    setMessages([]);
     setErrorMsg(null);
   }, []);
 
@@ -430,9 +474,11 @@ export function useWebRTC() {
     status,
     connectionType,
     filesProgress,
+    messages,
     errorMsg,
     initSignaling,
     sendFiles,
+    sendChatMessage,
     disconnect
   };
 }
