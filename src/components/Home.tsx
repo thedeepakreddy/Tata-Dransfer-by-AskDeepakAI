@@ -82,7 +82,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Your Name (Optional)</label>
             <input 
               type="text" 
-              placeholder="e.g. James M." 
+              placeholder="e.g. Deepak R." 
               value={userName}
               onChange={(e) => onUserNameChange(e.target.value)}
               style={{
