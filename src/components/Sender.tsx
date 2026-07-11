@@ -13,7 +13,6 @@ interface SenderProps {
 
 export function Sender({ onBack, userName }: SenderProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [showQrCode, setShowQrCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const hook = useWebRTC(userName);
@@ -48,7 +47,7 @@ export function Sender({ onBack, userName }: SenderProps) {
   const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected';
   const hasFiles = Object.keys(filesProgress).length > 0;
 
-  if (isConnected && showQrCode) {
+  if (isConnected) {
     return <ChatRoom hook={hook} onBack={onBack} />;
   }
 
@@ -68,52 +67,10 @@ export function Sender({ onBack, userName }: SenderProps) {
         </div>
       )}
 
-      <div className="work-grid">
-        <div>
-          <input 
-            type="file" 
-            multiple 
-            className="hidden" 
-            style={{ display: 'none' }}
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-          />
-          <button className="picker-btn" onClick={() => fileInputRef.current?.click()}>
-            + Add files
-          </button>
-          
-          <div id="fileList">
-            {(Object.values(filesProgress) as FileProgress[]).map((file) => (
-              <div key={file.fileId} className="file-chip">
-                <div className="meta">
-                  <span className="name">{file.name}</span>
-                  <span className="size">{formatBytes(file.size)}</span>
-                </div>
-                {file.status === 'pending' && <div className="progress-wrap"><div className="progress-fill" style={{ width: '0%' }}></div></div>}
-                {file.status === 'transferring' && (
-                  <div className="progress-wrap">
-                    <div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
-                  </div>
-                )}
-                {file.status === 'complete' && <span className="check">Done</span>}
-              </div>
-            ))}
-          </div>
-
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', maxWidth: '400px', margin: '0 auto' }}>
+        <div className="panel" style={{ width: '100%' }}>
           {!isConnected && (
-            <button 
-              className="primary-btn" 
-              onClick={() => setShowQrCode(true)} 
-              disabled={!hasFiles || showQrCode}
-            >
-              Show code to receiver
-            </button>
-          )}
-        </div>
-
-        <div className="panel" style={{ display: (showQrCode || isConnected) ? 'block' : 'none' }}>
-          {!isConnected && (
-            <div className="ring-stage small">
+            <div className="ring-stage">
               <div className="ring"></div><div className="ring"></div><div className="ring"></div>
               <div className="qr-core">
                 {qrCodeUrl ? (
@@ -152,11 +109,44 @@ export function Sender({ onBack, userName }: SenderProps) {
           {!isConnected && (
             <div style={{ textAlign: 'center', marginTop: '24px' }}>
               <p className="panel-label" style={{ marginBottom: '12px' }}>Scan the QR code, or enter this pin manually:</p>
-              <div style={{ background: 'var(--paper)', padding: '12px 24px', borderRadius: '12px', display: 'inline-block', border: '1px solid var(--hairline)' }}>
-                <strong style={{ fontSize: '28px', letterSpacing: '6px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
+              <div style={{ background: 'var(--paper)', padding: '14px 32px', borderRadius: '16px', display: 'inline-block', border: '1px solid var(--hairline)' }}>
+                <strong style={{ fontSize: '32px', letterSpacing: '8px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
               </div>
             </div>
           )}
+        </div>
+
+        <div style={{ width: '100%' }}>
+          <p className="panel-label" style={{ marginBottom: '16px', textAlign: 'center' }}>Or select files to queue before connecting:</p>
+          <input 
+            type="file" 
+            multiple 
+            className="hidden" 
+            style={{ display: 'none' }}
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+          />
+          <button className="picker-btn" onClick={() => fileInputRef.current?.click()}>
+            + Add files
+          </button>
+          
+          <div id="fileList">
+            {(Object.values(filesProgress) as FileProgress[]).map((file) => (
+              <div key={file.fileId} className="file-chip">
+                <div className="meta">
+                  <span className="name">{file.name}</span>
+                  <span className="size">{formatBytes(file.size)}</span>
+                </div>
+                {file.status === 'pending' && <div className="progress-wrap"><div className="progress-fill" style={{ width: '0%' }}></div></div>}
+                {file.status === 'transferring' && (
+                  <div className="progress-wrap">
+                    <div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
+                  </div>
+                )}
+                {file.status === 'complete' && <span className="check">Done</span>}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

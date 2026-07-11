@@ -60,6 +60,7 @@ export default function App() {
           setScreen('home');
         }} userName={userName} />}
       </div>
+    </div>
     </>
   );
 }
