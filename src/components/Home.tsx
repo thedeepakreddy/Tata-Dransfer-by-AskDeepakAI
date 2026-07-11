@@ -99,7 +99,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
                 border: '1px solid var(--hairline)',
                 background: 'var(--surface)',
                 fontFamily: 'Inter, sans-serif',
-                fontSize: '14px',
+                fontSize: '16px',
                 outline: 'none'
               }}
             />
