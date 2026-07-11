@@ -302,12 +302,12 @@ h2.title {
 }
 
 @media (max-width: 767px) {
-  .ring-stage { height: 220px; width: 220px; margin: 6px auto 26px; }
+  .ring-stage { height: 280px; width: 280px; margin: 6px auto 26px; }
   .ring-stage .ring { animation-name: rippleMobile; }
-  .ring-stage .ring:nth-child(1), .ring-stage .ring:nth-child(2), .ring-stage .ring:nth-child(3) { width: 80px; height: 80px; }
+  .ring-stage .ring:nth-child(1), .ring-stage .ring:nth-child(2), .ring-stage .ring:nth-child(3) { width: 140px; height: 140px; }
   @keyframes rippleMobile {
-    0% { width: 80px; height: 80px; opacity: 0.55; }
-    100% { width: 220px; height: 220px; opacity: 0; }
+    0% { width: 140px; height: 140px; opacity: 0.55; }
+    100% { width: 280px; height: 280px; opacity: 0; }
   }
 }
 
@@ -329,16 +329,17 @@ h2.title {
 
 .scan-frame {
   position: relative;
-  width: 168px; height: 168px;
-  border-radius: 24px;
+  width: 240px; height: 240px;
+  border-radius: 28px;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
+  box-shadow: 0 16px 32px -12px rgba(20,24,28,0.25);
 }
 #qr-reader { width: 100%; border: none !important; }
 #qr-reader__scan_region { min-height: auto !important; }
 
 @media (max-width: 767px) {
-  .scan-frame { width: 148px; height: 148px; border-radius: 22px; }
+  .scan-frame { width: 220px; height: 220px; border-radius: 24px; }
 }
 .corner { position: absolute; width: 26px; height: 26px; border: 2.5px solid var(--ink); z-index: 10; }
 .corner.tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: 8px 0 0 0; }
@@ -374,7 +375,7 @@ h2.title {
   align-items: start;
 }
 @media (max-width: 767px) {
-  .work-grid { display: flex; flex-direction: column; gap: 24px; }
+  .work-grid { display: flex; flex-direction: column-reverse; gap: 24px; }
 }
 
 .panel {

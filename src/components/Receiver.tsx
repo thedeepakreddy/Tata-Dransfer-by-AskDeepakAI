@@ -143,7 +143,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
         
         <div className="panel">
           {!isConnected && status === 'idle' && (
-            <div className="ring-stage small" style={{ zIndex: 1 }}>
+            <div className="ring-stage" style={{ zIndex: 1 }}>
               <div className="ring"></div><div className="ring"></div><div className="ring"></div>
               <div className="scan-frame">
                 <div id="qr-reader" style={{ width: '100%', height: '100%' }}></div>
