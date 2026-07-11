@@ -136,7 +136,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
         color: 'var(--muted)',
         fontFamily: 'Inter, sans-serif'
       }}>
-        Tata Dransfer &trade; 2026 -- This Website is created and maintained by <a href="https://github.com/thedeepakreddy" target="_blank" rel="noopener noreferrer" style={{ color: 'darkblue', textDecoration: 'none', fontWeight: 600 }}>Deepak Reddy</a>
+        Tata Dransfer &trade; 2026 -- This page is designed, developed and maintained by <a href="https://github.com/thedeepakreddy" target="_blank" rel="noopener noreferrer" style={{ color: 'darkblue', textDecoration: 'none', fontWeight: 600 }}>Deepak Reddy</a>
       </div>
     </section>
   );
