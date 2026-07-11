@@ -149,7 +149,12 @@ export function Sender({ onBack }: SenderProps) {
           </div>
           
           {!isConnected && (
-            <p className="panel-label">Scan with the receiving device<br/><br/>Code: <strong style={{color: 'var(--ink)'}}>{roomId}</strong></p>
+            <div style={{ textAlign: 'center', marginTop: '24px' }}>
+              <p className="panel-label" style={{ marginBottom: '12px' }}>Scan the QR code, or enter this pin manually:</p>
+              <div style={{ background: 'var(--paper)', padding: '12px 24px', borderRadius: '12px', display: 'inline-block', border: '1px solid var(--hairline)' }}>
+                <strong style={{ fontSize: '28px', letterSpacing: '6px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
+              </div>
+            </div>
           )}
         </div>
       </div>
