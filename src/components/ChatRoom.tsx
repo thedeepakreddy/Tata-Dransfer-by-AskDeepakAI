@@ -49,7 +49,7 @@ export function ChatRoom({ hook, onBack }: ChatRoomProps) {
           <h2 className="title" style={{ margin: 0 }}>Secure Session</h2>
           <div className="chat-subtitle">
             <Lock size={12} className="lock-icon" />
-            End-to-End Encrypted &middot; {connectionType === 'local' ? 'Local WiFi ⚡' : 'Relayed 🌐'}
+            End-to-End Encrypted &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'}
           </div>
         </div>
       </div>

@@ -94,7 +94,7 @@ export function Sender({ onBack }: SenderProps) {
                     <div className="progress-fill" style={{ width: `${Math.max(5, (file.bytesTransferred / file.size) * 100)}%` }}></div>
                   </div>
                 )}
-                {file.status === 'complete' && <span className="check">✓</span>}
+                {file.status === 'complete' && <span className="check">Done</span>}
               </div>
             ))}
           </div>
@@ -143,7 +143,7 @@ export function Sender({ onBack }: SenderProps) {
             {!isConnected && <span className="pulse-dot"></span>}
             <span>
               {status === 'connecting' ? 'Waiting for scan…' : 
-               isConnected ? `Connected · ${connectionType === 'local' ? 'Local WiFi ⚡' : 'Relayed 🌐'}` : 
+               isConnected ? `Connected · ${connectionType === 'local' ? 'Local WiFi' : 'Relayed'}` : 
                'Disconnected'}
             </span>
           </div>
