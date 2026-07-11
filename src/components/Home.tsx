@@ -23,18 +23,18 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
     .catch(console.error);
     
     // Fetch geo location
-    fetch('https://ipinfo.io/json')
+    fetch('https://get.geojs.io/v1/ip/geo.json')
       .then(res => res.json())
       .then(data => {
         if (data && data.city) {
-          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.region || data.country });
+          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.country });
         } else {
-          setGeoInfo({ ip: '', city: 'Location', region: 'Unavailable' });
+          setGeoInfo({ ip: 'Local', city: 'Unknown', region: 'Location' });
         }
       })
       .catch((err) => {
         console.error(err);
-        setGeoInfo({ ip: '', city: 'Location', region: 'Unavailable' });
+        setGeoInfo({ ip: 'Local', city: 'Unknown', region: 'Location' });
       });
 
     // Update time clock
@@ -63,10 +63,8 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
         zIndex: 100
       }}>
         <div style={{ color: 'var(--ink)', fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
-        {geoInfo ? (
+        {geoInfo && (
           <div>{geoInfo.city}, {geoInfo.region}</div>
-        ) : (
-          <div>Locating...</div>
         )}
       </div>
 
