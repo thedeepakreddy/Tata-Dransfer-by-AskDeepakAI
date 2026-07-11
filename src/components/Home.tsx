@@ -108,7 +108,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
               <span className="arrow">→</span>
             </button>
           </div>
-          <div className="foot-note"><span className="dot"></span>Files travel directly over WiFi, never through the internet</div>
+          <div className="foot-note"><span className="dot"></span>Files travel directly over WiFi, never through the internet if both devices are connected to the same WiFi and transfer speed is Instant</div>
         </div>
         <div className="ring-stage">
           <div className="ring"></div><div className="ring"></div><div className="ring"></div>
