@@ -121,7 +121,11 @@ export function useWebRTC(userName: string = '') {
 
   const createPeerConnection = useCallback(() => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' }
+      ],
     });
 
     pc.onicecandidate = (event) => {
@@ -226,6 +230,7 @@ export function useWebRTC(userName: string = '') {
 
   const setupDataChannel = (dc: RTCDataChannel) => {
     dc.binaryType = 'arraybuffer';
+    dc.bufferedAmountLowThreshold = 1024 * 512; // 512 KB threshold
     
     const handleOpen = () => {
       setStatus('connected');
@@ -421,14 +426,23 @@ export function useWebRTC(userName: string = '') {
         
         // Backpressure handling
         while (dc.bufferedAmount > 1024 * 1024) { // 1MB buffer limit
+          if (dc.readyState !== 'open') break;
           await new Promise(resolve => {
             const onLow = () => {
               dc.removeEventListener('bufferedamountlow', onLow);
+              dc.removeEventListener('close', onClose);
+              resolve(null);
+            };
+            const onClose = () => {
+              dc.removeEventListener('bufferedamountlow', onLow);
+              dc.removeEventListener('close', onClose);
               resolve(null);
             };
             dc.addEventListener('bufferedamountlow', onLow);
+            dc.addEventListener('close', onClose);
           });
         }
+        if (dc.readyState !== 'open') break;
 
         dc.send(chunk);
         bytesSent += chunk.length;
