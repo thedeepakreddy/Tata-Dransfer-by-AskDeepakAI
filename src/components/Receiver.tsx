@@ -15,7 +15,6 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
   const scannerRef = useRef<any>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
-  const [showManual, setShowManual] = useState(false);
   
   const hook = useWebRTC(userName);
   const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = hook;
@@ -119,29 +118,8 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
         </div>
       )}
 
-      <div className="work-grid">
-        <div>
-          <p className="desc desktop-only" style={{ marginBottom: '14px' }}>No camera handy? Type the 6-character code shown on the sender's screen instead.</p>
-          <button className="text-link" style={{ textAlign: 'left', margin: 0 }} onClick={() => setShowManual(!showManual)}>
-            Enter code manually
-          </button>
-          
-          <div className={`manual-entry ${showManual ? 'open' : ''}`} style={{ marginLeft: 0 }}>
-            <form onSubmit={handleManualJoin}>
-              <input 
-                type="text" 
-                maxLength={6} 
-                placeholder="A3F9K2" 
-                aria-label="Manual pairing code"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-              />
-              <button type="submit" className="primary-btn" disabled={manualCode.length < 6}>Connect</button>
-            </form>
-          </div>
-        </div>
-        
-        <div className="panel">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '32px', maxWidth: '400px', margin: '0 auto' }}>
+        <div className="panel" style={{ width: '100%' }}>
           {!isConnected && status === 'idle' && (
             <div className="ring-stage" style={{ zIndex: 1 }}>
               <div className="ring"></div><div className="ring"></div><div className="ring"></div>
@@ -153,7 +131,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
             </div>
           )}
           <div className="status-line">
-            <span className="pulse-dot"></span>
+            {!isConnected && <span className="pulse-dot"></span>}
             <span>
               {status === 'connecting' ? 'Connecting to sender...' : 
                isConnected ? 'Connected, waiting for files...' : 
@@ -161,6 +139,38 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
             </span>
           </div>
         </div>
+
+        {!isConnected && (
+          <div style={{ width: '100%', textAlign: 'center' }}>
+            <p className="panel-label" style={{ marginBottom: '16px' }}>Or enter the 6-character code manually:</p>
+            <form onSubmit={handleManualJoin} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+              <input 
+                type="text" 
+                maxLength={6} 
+                placeholder="A3F9K2" 
+                aria-label="Manual pairing code"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
+                style={{ 
+                  background: 'var(--paper)', 
+                  padding: '14px 24px', 
+                  borderRadius: '16px', 
+                  border: '1px solid var(--hairline)',
+                  fontSize: '28px',
+                  letterSpacing: '8px',
+                  color: 'var(--ink)',
+                  fontFamily: 'monospace',
+                  textAlign: 'center',
+                  width: '100%',
+                  maxWidth: '280px',
+                  textTransform: 'uppercase',
+                  outline: 'none'
+                }}
+              />
+              <button type="submit" className="primary-btn" disabled={manualCode.length < 6} style={{ width: '100%', maxWidth: '280px' }}>Connect</button>
+            </form>
+          </div>
+        )}
       </div>
     </section>
   );
