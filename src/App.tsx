@@ -35,7 +35,9 @@ export default function App() {
   return (
     <div className="app-container">
       <div className="titlebar">
-        <div className="url-pill"><span>tatadransfer.app</span></div>
+        <a href="https://askdeepakai-datascientist.onrender.com/" target="_blank" rel="noopener noreferrer" className="url-pill" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <span>AskDeepakAI</span>
+        </a>
       </div>
       <div className="statusbar"><span>{timeStr || '9:41'}</span><span>TATA DRANSFER</span></div>
 
