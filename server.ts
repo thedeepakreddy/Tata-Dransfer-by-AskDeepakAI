@@ -12,23 +12,8 @@ async function startServer() {
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true });
 
-  // Proxy endpoint for IP Geolocation
+  // Proxy endpoint for IP Geolocation using free API
   app.get('/api/location', async (req, res) => {
-    const apiKey = process.env.IPGEOLOCATION_API_KEY;
-    
-    // Fallback if they haven't set the API key in Render yet
-    if (!apiKey) {
-      try {
-        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
-        // If no API key is provided, try geojs as fallback or return empty
-        const resp = await fetch(`https://get.geojs.io/v1/ip/geo.json?ip=${ip}`);
-        const data = await resp.json();
-        return res.json({ city: data.city || 'Unknown', region: data.country || 'Location' });
-      } catch (err) {
-        return res.json({ city: 'Unknown', region: 'Location' });
-      }
-    }
-
     try {
       // Get client's true IP in Render
       let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
@@ -40,16 +25,16 @@ async function startServer() {
         ip = ''; 
       }
 
-      const resp = await fetch(`https://api.ipgeolocation.io/ipgeo?apiKey=${apiKey}&ip=${ip}`);
+      const resp = await fetch(`https://get.geojs.io/v1/ip/geo.json?ip=${ip}`);
       const data = await resp.json();
       
-      res.json({
-        city: data.city || 'Unknown',
-        region: data.country_name || data.state_prov || 'Location'
+      return res.json({ 
+        city: data.city || 'Unknown', 
+        region: data.country || 'Location' 
       });
     } catch (err) {
-      console.error('Error fetching from ipgeolocation:', err);
-      res.status(500).json({ error: 'Failed to fetch location' });
+      console.error('Error fetching location:', err);
+      return res.json({ city: 'Unknown', region: 'Location' });
     }
   });
 
