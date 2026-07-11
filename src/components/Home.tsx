@@ -10,7 +10,7 @@ export function Home({ onSelectScreen }: HomeProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    QRCode.toDataURL('https://tata-dransfer-by-ask-deepak-eupcmt5x4-thedeepakreddys-projects.vercel.app', { 
+    QRCode.toDataURL('https://tata-dransfer-by-askdeepakai-1.onrender.com', { 
       width: 200,
       margin: 1,
       color: { dark: '#14181C', light: '#FFFFFF' }
