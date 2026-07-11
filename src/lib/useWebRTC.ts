@@ -32,7 +32,7 @@ export interface ChatMessage {
 
 const CHUNK_SIZE = 16384; // 16 KB
 
-export function useWebRTC() {
+export function useWebRTC(userName: string = '') {
   const [role, setRole] = useState<Role>(null);
   const [roomId, setRoomId] = useState<string>('');
   const [status, setStatus] = useState<ConnectionState>('idle');
@@ -40,6 +40,7 @@ export function useWebRTC() {
   const [filesProgress, setFilesProgress] = useState<Record<string, FileProgress>>({});
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [peerName, setPeerName] = useState<string>('');
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -49,11 +50,13 @@ export function useWebRTC() {
   const roomIdRef = useRef<string>('');
   const roleRef = useRef<Role>(null);
   const statusRef = useRef<ConnectionState>('idle');
+  const userNameRef = useRef(userName);
 
   // Sync refs
   useEffect(() => { roomIdRef.current = roomId; }, [roomId]);
   useEffect(() => { roleRef.current = role; }, [role]);
   useEffect(() => { statusRef.current = status; }, [status]);
+  useEffect(() => { userNameRef.current = userName; }, [userName]);
   
   // File transfer state
   const sendQueueRef = useRef<File[]>([]);
@@ -226,6 +229,9 @@ export function useWebRTC() {
     
     const handleOpen = () => {
       setStatus('connected');
+      if (dc.readyState === 'open') {
+        dc.send(JSON.stringify({ type: 'name_exchange', userName: userNameRef.current }));
+      }
       if (roleRef.current === 'sender' && sendQueueRef.current.length > 0) {
         processSendQueue();
       }
@@ -244,7 +250,9 @@ export function useWebRTC() {
     dc.onmessage = async (event) => {
       if (typeof event.data === 'string') {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'meta') {
+        if (msg.type === 'name_exchange') {
+          setPeerName(msg.userName);
+        } else if (msg.type === 'meta') {
           handleFileMetadata(msg);
         } else if (msg.type === 'eof') {
           handleFileEof(msg);
@@ -482,6 +490,7 @@ export function useWebRTC() {
     filesProgress,
     messages,
     errorMsg,
+    peerName,
     initSignaling,
     sendFiles,
     sendChatMessage,

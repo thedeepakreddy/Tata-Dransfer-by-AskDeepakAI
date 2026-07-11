@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useWebRTC, FileProgress } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
@@ -7,14 +7,17 @@ import { ChatRoom } from './ChatRoom';
 
 interface ReceiverProps {
   onBack: () => void;
+  userName: string;
 }
 
-export function Receiver({ onBack }: ReceiverProps) {
+export function Receiver({ onBack, userName }: ReceiverProps) {
+  const [cameraMode, setCameraMode] = useState<'environment'|'user'>('environment');
+  const scannerRef = useRef<any>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
   const [showManual, setShowManual] = useState(false);
   
-  const hook = useWebRTC();
+  const hook = useWebRTC(userName);
   const { initSignaling, roomId, status, filesProgress, errorMsg, connectionType, disconnect } = hook;
 
   useEffect(() => {

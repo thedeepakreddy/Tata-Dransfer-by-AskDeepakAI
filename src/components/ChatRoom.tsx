@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
 import { useWebRTC, ChatMessage } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
 
@@ -58,9 +58,9 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
       {/* chat header */}
       <div className="chat-header">
         <button className="back-btn" aria-label="Back" onClick={() => { disconnect(); onBack(); }}>←</button>
-        <div className="peer-avatar">P2</div>
+        <div className="peer-avatar">{hook.peerName ? hook.peerName.substring(0, 2).toUpperCase() : '??'}</div>
         <div className="peer-meta">
-          <div className="peer-name">{role === 'sender' ? 'Receiver' : 'Sender'} Device</div>
+          <div className="peer-name">{hook.peerName || 'Unknown user'}</div>
           <div className="peer-status">
             {status === 'disconnected' ? (
               <span style={{ color: '#E11D48' }}>Disconnected</span>

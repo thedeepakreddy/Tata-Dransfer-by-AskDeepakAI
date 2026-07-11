@@ -12,6 +12,7 @@ export type Screen = 'home' | 'sender' | 'receiver';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -28,12 +29,12 @@ export default function App() {
       <div className="statusbar"><span>9:41</span><span>TATA DRANSFER</span></div>
 
       <div className="canvas">
-        {screen === 'home' && <Home onSelectScreen={setScreen} />}
-        {screen === 'sender' && <Sender onBack={() => setScreen('home')} />}
+        {screen === 'home' && <Home onSelectScreen={setScreen} userName={userName} onUserNameChange={setUserName} />}
+        {screen === 'sender' && <Sender onBack={() => setScreen('home')} userName={userName} />}
         {screen === 'receiver' && <Receiver onBack={() => {
           window.history.replaceState({}, '', window.location.pathname);
           setScreen('home');
-        }} />}
+        }} userName={userName} />}
       </div>
     </div>
   );

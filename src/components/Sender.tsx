@@ -8,14 +8,15 @@ import { ChatRoom } from './ChatRoom';
 
 interface SenderProps {
   onBack: () => void;
+  userName: string;
 }
 
-export function Sender({ onBack }: SenderProps) {
+export function Sender({ onBack, userName }: SenderProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [showQrCode, setShowQrCode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const hook = useWebRTC();
+  const hook = useWebRTC(userName);
   const { initSignaling, roomId, status, sendFiles, filesProgress, errorMsg, connectionType, disconnect } = hook;
 
   useEffect(() => {

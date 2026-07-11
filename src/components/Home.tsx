@@ -4,9 +4,11 @@ import type { Screen } from '../App';
 
 interface HomeProps {
   onSelectScreen: (screen: Screen) => void;
+  userName: string;
+  onUserNameChange: (name: string) => void;
 }
 
-export function Home({ onSelectScreen }: HomeProps) {
+export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +33,26 @@ export function Home({ onSelectScreen }: HomeProps) {
             </span>
           </h1>
           <p className="sub">Send files device to device over WiFi. Nothing is ever stored on a server.</p>
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Your Name (Optional)</label>
+            <input 
+              type="text" 
+              placeholder="e.g. James M." 
+              value={userName}
+              onChange={(e) => onUserNameChange(e.target.value)}
+              style={{
+                width: '100%',
+                maxWidth: '280px',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1px solid var(--hairline)',
+                background: 'var(--surface)',
+                fontFamily: 'Inter, sans-serif',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+            />
+          </div>
           <div className="role-buttons">
             <button className="role-btn primary" onClick={() => onSelectScreen('sender')}>
               <div><div className="label">Send</div><div className="hint">Pick files from this device</div></div>
