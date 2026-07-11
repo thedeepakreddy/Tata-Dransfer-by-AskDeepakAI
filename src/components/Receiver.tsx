@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent, useRef } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 import { useWebRTC, FileProgress } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
 
@@ -31,47 +31,53 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
       return;
     }
 
-    const scanner = new Html5QrcodeScanner(
-      "qr-reader",
-      { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 },
-        videoConstraints: { facingMode: "environment" }
-      },
-      /* verbose= */ false
-    );
+    const html5QrCode = new Html5Qrcode("qr-reader");
+    scannerRef.current = html5QrCode;
 
-    scanner.render(
-      (decodedText) => {
-        try {
-          if (decodedText.startsWith('http')) {
-            const url = new URL(decodedText);
-            const room = url.searchParams.get('room');
-            if (room) {
-              scanner.clear();
-              initSignaling(room, 'receiver');
-              return;
-            }
+    const onScanSuccess = (decodedText: string) => {
+      try {
+        if (decodedText.startsWith('http')) {
+          const url = new URL(decodedText);
+          const room = url.searchParams.get('room');
+          if (room) {
+            html5QrCode.stop().catch(console.error);
+            initSignaling(room, 'receiver');
+            return;
           }
-
-          const data = JSON.parse(decodedText);
-          if (data.roomId) {
-            scanner.clear();
-            initSignaling(data.roomId, 'receiver');
-          } else {
-             setScanError('Invalid QR code format');
-          }
-        } catch (e) {
-          setScanError('Invalid QR code format');
         }
-      },
-      (errorMessage) => {
-        // quiet fail on scan errors
+
+        const data = JSON.parse(decodedText);
+        if (data.roomId) {
+          html5QrCode.stop().catch(console.error);
+          initSignaling(data.roomId, 'receiver');
+        } else {
+           setScanError('Invalid QR code format');
+        }
+      } catch (e) {
+        setScanError('Invalid QR code format');
       }
-    );
+    };
+
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess,
+      () => {}
+    ).catch(err => {
+      html5QrCode.start(
+        { facingMode: "user" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess,
+        () => {}
+      ).catch(err2 => {
+        setScanError('Camera initialization failed. Please allow camera access.');
+      });
+    });
 
     return () => {
-      scanner.clear().catch(e => console.error("Error clearing scanner", e));
+      if (scannerRef.current?.isScanning) {
+        scannerRef.current.stop().catch(console.error);
+      }
     };
   }, [initSignaling, status]);
 
