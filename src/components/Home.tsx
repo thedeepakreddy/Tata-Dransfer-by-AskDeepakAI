@@ -22,15 +22,20 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
     .then(url => setQrUrl(url))
     .catch(console.error);
     
-    // Fetch geo IP
-    fetch('https://ipapi.co/json/')
+    // Fetch geo location
+    fetch('https://ipinfo.io/json')
       .then(res => res.json())
       .then(data => {
-        if (data && data.ip) {
-          setGeoInfo({ ip: data.ip, city: data.city, region: data.region });
+        if (data && data.city) {
+          setGeoInfo({ ip: data.ip || '', city: data.city, region: data.region || data.country });
+        } else {
+          setGeoInfo({ ip: '', city: 'Location', region: 'Unavailable' });
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error(err);
+        setGeoInfo({ ip: '', city: 'Location', region: 'Unavailable' });
+      });
 
     // Update time clock
     const updateClock = () => {
