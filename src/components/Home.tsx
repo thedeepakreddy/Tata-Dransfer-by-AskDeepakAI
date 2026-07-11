@@ -71,8 +71,8 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
       <div className="home-grid">
         <div>
           <p className="eyebrow">Local · No cloud · No signup</p>
-          <h1 className="brand" style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
-            Tata Dransfer 
+          <h1 className="brand" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <img src="/logo.png" alt="Tata Dransfer" style={{ height: '48px', objectFit: 'contain' }} />
             <span style={{ fontSize: '0.55em', fontWeight: '500', color: 'var(--muted)' }}>
               by <a href="https://askdeepakai-datascientist.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#4169E1', textDecoration: 'none' }}>AskDeepakAI</a>
             </span>
