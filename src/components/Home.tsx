@@ -77,7 +77,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
               by <a href="https://askdeepakai-datascientist.onrender.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#4169E1', textDecoration: 'none' }}>AskDeepakAI</a>
             </span>
           </h1>
-          <p className="sub">Send files device to device over WiFi. Nothing is ever stored on a server.</p>
+          <p className="sub">Send files device to device over WiFi(instant), Mobile data(depends on speed) from anywhere in the world. Nothing is ever stored on a server. Chats are end to end encrypted.</p>
           <div style={{ marginBottom: '24px' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Your Name (Optional)</label>
             <input 
