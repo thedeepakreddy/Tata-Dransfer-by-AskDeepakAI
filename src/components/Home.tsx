@@ -44,7 +44,7 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
 
   return (
     <section className="screen active" id="home" style={{ position: 'relative' }}>
-      {/* Top right time and IP widget */}
+      {/* Top right time and location */}
       <div style={{
         position: 'absolute',
         top: '24px',
@@ -55,20 +55,11 @@ export function Home({ onSelectScreen, userName, onUserNameChange }: HomeProps) 
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: '11px',
         color: 'var(--muted)',
-        background: 'rgba(255, 255, 255, 0.6)',
-        backdropFilter: 'blur(10px)',
-        padding: '8px 12px',
-        borderRadius: '8px',
-        border: '1px solid var(--hairline)',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
         zIndex: 100
       }}>
         <div style={{ color: 'var(--ink)', fontWeight: 600, marginBottom: '2px' }}>{timeStr}</div>
         {geoInfo ? (
-          <>
-            <div>{geoInfo.ip}</div>
-            <div>{geoInfo.city}, {geoInfo.region}</div>
-          </>
+          <div>{geoInfo.city}, {geoInfo.region}</div>
         ) : (
           <div>Locating...</div>
         )}
