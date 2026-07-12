@@ -342,7 +342,19 @@ export function useCallManager(
   const attachTrackHandler = useCallback(() => {
     if (!pcRef.current) return;
     pcRef.current.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
+      setRemoteStream(prev => {
+        const newStream = new MediaStream();
+        if (prev) {
+          prev.getTracks().forEach(t => newStream.addTrack(t));
+        }
+        const incomingTracks = event.streams && event.streams[0] ? event.streams[0].getTracks() : [event.track];
+        incomingTracks.forEach(t => {
+          if (!newStream.getTracks().find(nt => nt.id === t.id)) {
+            newStream.addTrack(t);
+          }
+        });
+        return newStream;
+      });
       setCallState('active');
       startQualityMonitor();
     };
