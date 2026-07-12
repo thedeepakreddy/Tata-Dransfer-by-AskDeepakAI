@@ -105,7 +105,15 @@ async function startServer() {
             peersArray[0].send(JSON.stringify({ type: "ready", roomId, isInitiator: true }));
             peersArray[1].send(JSON.stringify({ type: "ready", roomId, isInitiator: false }));
           }
-        } else if (type === "offer" || type === "answer" || type === "ice-candidate") {
+        } else if (
+          type === "offer" || 
+          type === "answer" || 
+          type === "ice-candidate" ||
+          type === "chat" ||
+          type === "typing" ||
+          type === "call-signal" ||
+          type === "name_exchange"
+        ) {
           if (!currentRoomId) return;
           const room = rooms.get(currentRoomId);
           if (room) {

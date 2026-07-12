@@ -156,6 +156,14 @@ export function useWebRTC(userName: string = '') {
           await handleAnswer(msg.payload);
         } else if (msg.type === 'ice-candidate') {
           await handleIceCandidate(msg.payload);
+        } else if (msg.type === 'chat') {
+          setMessages(prev => [...prev, msg.payload]);
+        } else if (msg.type === 'typing') {
+          setIsPeerTyping(true);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setIsPeerTyping(false), 2500);
+        } else if (msg.type === 'call-signal') {
+          callManagerRef.current?.handleCallMessage({ type: 'call-signal', ...msg.payload });
         } else if (msg.type === 'peer-disconnected') {
           setStatus('disconnected');
           setErrorMsg('Peer disconnected');
@@ -192,7 +200,6 @@ export function useWebRTC(userName: string = '') {
         { urls: 'stun:openrelay.metered.ca:80' },
         { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
       ],
     });
 
@@ -566,23 +573,20 @@ export function useWebRTC(userName: string = '') {
   };
 
   const sendChatMessage = useCallback((text: string) => {
-    const msgId = uuidv4();
-    const chatMsg = { type: 'chat', id: msgId, text, timestamp: Date.now() };
+    const msg: ChatMessage = { id: uuidv4(), senderRole: roleRef.current || 'system', text, timestamp: Date.now() };
     if (dcRef.current?.readyState === 'open') {
-      dcRef.current.send(JSON.stringify(chatMsg));
+      dcRef.current.send(JSON.stringify({ type: 'chat', ...msg }));
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
     }
-    
-    setMessages(prev => [...prev, {
-      id: msgId,
-      senderRole: roleRef.current,
-      text,
-      timestamp: chatMsg.timestamp
-    }]);
+    setMessages(prev => [...prev, msg]);
   }, []);
 
   const sendTyping = useCallback(() => {
     if (dcRef.current?.readyState === 'open') {
       dcRef.current.send(JSON.stringify({ type: 'typing' }));
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
     }
   }, []);
 

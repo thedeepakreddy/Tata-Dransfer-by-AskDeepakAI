@@ -52,12 +52,15 @@ export function useCallManager(
 
   const sendCallSignal = useCallback((type: string, payload: any = {}) => {
     if (dcRef.current?.readyState === 'open') {
-      console.log('Sending call signal:', type, payload);
+      console.log('Sending call signal via DC:', type, payload);
       dcRef.current.send(JSON.stringify({ type, ...payload }));
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('Sending call signal via WS fallback:', type, payload);
+      wsRef.current.send(JSON.stringify({ type: 'call-signal', payload: { type, ...payload } }));
     } else {
-      console.log('Cannot send call signal, data channel not open');
+      console.log('Cannot send call signal, no connection available');
     }
-  }, [dcRef]);
+  }, [dcRef, wsRef]);
 
   const startLocalMedia = useCallback(async (mode: CallMode) => {
     if (mode === 'audio') {
