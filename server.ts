@@ -67,7 +67,7 @@ async function startServer() {
     ws.on("message", (message) => {
       try {
         const data = JSON.parse(message.toString());
-        const { type, roomId, payload } = data;
+        const { type, roomId, payload, role } = data;
 
         if (type === "join") {
           currentRoomId = roomId;
@@ -78,13 +78,22 @@ async function startServer() {
           }
 
           if (room.peers.size >= 2 && !room.peers.has(ws)) {
-            // Assume the oldest peer is a ghost connection if the room is full
-            const oldestPeer = room.peers.values().next().value;
-            if (oldestPeer) {
-              oldestPeer.terminate();
-              room.peers.delete(oldestPeer);
+            let kicked = false;
+            for (const peer of room.peers) {
+              if ((peer as any).role === role) {
+                peer.terminate();
+                room.peers.delete(peer);
+                kicked = true;
+                break;
+              }
+            }
+            if (!kicked) {
+              ws.send(JSON.stringify({ type: "error", message: "Room is full" }));
+              return;
             }
           }
+
+          (ws as any).role = role;
 
           room.peers.add(ws);
           room.lastActivity = Date.now();

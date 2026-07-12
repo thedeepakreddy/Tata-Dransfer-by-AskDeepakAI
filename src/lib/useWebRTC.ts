@@ -135,7 +135,7 @@ export function useWebRTC(userName: string = '') {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'join', roomId: room }));
+      ws.send(JSON.stringify({ type: 'join', roomId: room, role: clientRole }));
     };
 
     ws.onmessage = async (event) => {
