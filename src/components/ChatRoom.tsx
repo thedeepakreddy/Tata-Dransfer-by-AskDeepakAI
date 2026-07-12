@@ -108,10 +108,11 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
     }
   };
 
-  const handleInput = (e: ChangeEvent<HTMLTextAreaElement>) => {
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
+    if (hook.sendTyping) hook.sendTyping();
     e.target.style.height = 'auto';
-    e.target.style.height = Math.min(e.target.scrollHeight, 90) + 'px';
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -252,6 +253,16 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
         <div className="conn-note"><span className="dot"></span>End-to-End Encrypted</div>
 
         {messages.map((msg: ChatMessage) => {
+          if (msg.isSystemMessage) {
+            return (
+              <div key={msg.id} style={{ display: 'flex', justifyContent: 'center', margin: '12px 0' }}>
+                <div style={{ background: 'var(--surface)', padding: '6px 16px', borderRadius: '16px', fontSize: '12px', fontWeight: 600, color: 'var(--muted)', border: '1px solid var(--hairline)', textAlign: 'center' }}>
+                  {msg.text}
+                </div>
+              </div>
+            );
+          }
+
           const isMe = msg.senderRole === role;
           const rowClass = `row ${isMe ? 'out' : 'in'}`;
           const timeString = new Date(msg.timestamp).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
@@ -312,6 +323,18 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
             </div>
           );
         })}
+        
+        {hook.isPeerTyping && (
+          <div className="row in typing-row">
+            <div className="bubble-group">
+              <div className="bubble">
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+                <div className="typing-dot"></div>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 

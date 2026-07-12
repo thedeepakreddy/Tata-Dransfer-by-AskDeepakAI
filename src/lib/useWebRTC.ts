@@ -31,9 +31,10 @@ export interface FileProgress {
 
 export interface ChatMessage {
   id: string;
-  senderRole: Role;
+  senderRole: Role | 'system';
   text?: string;
   fileId?: string;
+  isSystemMessage?: boolean;
   timestamp: number;
 }
 
@@ -64,6 +65,7 @@ export function useWebRTC(userName: string = '') {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [peerName, setPeerName] = useState<string>('');
+  const [isPeerTyping, setIsPeerTyping] = useState(false);
 
   // Call state
   const [callState, setCallState] = useState<CallState>('idle');
@@ -89,6 +91,7 @@ export function useWebRTC(userName: string = '') {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Refs for state accessed inside callbacks
   const roomIdRef = useRef<string>('');
@@ -339,6 +342,10 @@ export function useWebRTC(userName: string = '') {
           handleFileMetadata(msg);
         } else if (msg.type === 'eof') {
           handleFileEof(msg);
+        } else if (msg.type === 'typing') {
+          setIsPeerTyping(true);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setIsPeerTyping(false), 2500);
         } else if (msg.type === 'chat') {
           setMessages(prev => [...prev, {
             id: msg.id,
@@ -565,6 +572,12 @@ export function useWebRTC(userName: string = '') {
     }]);
   }, []);
 
+  const sendTyping = useCallback(() => {
+    if (dcRef.current?.readyState === 'open') {
+      dcRef.current.send(JSON.stringify({ type: 'typing' }));
+    }
+  }, []);
+
   const disconnect = useCallback(() => {
     if (wsRef.current) wsRef.current.close();
     if (dcRef.current) dcRef.current.close();
@@ -586,9 +599,11 @@ export function useWebRTC(userName: string = '') {
     messages,
     errorMsg,
     peerName,
+    isPeerTyping,
     initSignaling,
     sendFiles,
     sendChatMessage,
+    sendTyping,
     disconnect,
     ...callManager,
     callState,

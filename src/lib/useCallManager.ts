@@ -46,6 +46,7 @@ export function useCallManager(
   const qualityMonitorHandleRef = useRef<NodeJS.Timeout | null>(null);
   const activeResolutionTierRef = useRef<'720p'|'480p'>('720p');
   const isCallerRef = useRef(false);
+  const callStartTimeRef = useRef<number>(0);
 
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
@@ -206,6 +207,35 @@ export function useCallManager(
   const callModeRef = useRef<CallMode>(null);
   useEffect(() => { callModeRef.current = callMode; }, [callMode]);
 
+  const logCall = useCallback((reason: 'ended' | 'missed' | 'rejected') => {
+    let text = '';
+    const modeStr = callModeRef.current === 'video' ? 'Video call' : 'Voice call';
+    if (reason === 'missed') {
+      text = `Missed ${callModeRef.current === 'video' ? 'video' : 'voice'} call`;
+    } else if (reason === 'rejected') {
+      text = `${modeStr} declined`;
+    } else {
+      if (callStartTimeRef.current > 0) {
+        const durationSeconds = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
+        const mins = Math.floor(durationSeconds / 60);
+        const secs = durationSeconds % 60;
+        const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+        text = `${modeStr} ended (${durationStr})`;
+      } else {
+        text = `${modeStr} ended`;
+      }
+    }
+    
+    setMessages(prev => [...prev, {
+      id: uuidv4(),
+      senderRole: 'system',
+      text,
+      isSystemMessage: true,
+      timestamp: Date.now()
+    }]);
+    callStartTimeRef.current = 0;
+  }, [setMessages]);
+
   const handleCallMessage = useCallback((msg: any) => {
     switch (msg.type) {
       case 'call-request':
@@ -250,12 +280,14 @@ export function useCallManager(
         break;
 
       case 'call-reject':
+        logCall('rejected');
         setCallState('rejected');
         cleanupCall();
         setTimeout(() => setCallState('idle'), 2000);
         break;
 
       case 'call-end':
+        logCall('ended');
         setCallState('ended');
         cleanupCall();
         setTimeout(() => setCallState('idle'), 2000);
@@ -278,17 +310,19 @@ export function useCallManager(
   }, [startLocalMedia, attachMediaToConnection, sendCallSignal, setCallState]);
 
   const rejectCall = useCallback(() => {
+    logCall('rejected');
     sendCallSignal('call-reject');
     setCallMode(null);
     setCallState('idle');
-  }, [sendCallSignal, setCallMode, setCallState]);
+  }, [sendCallSignal, setCallMode, setCallState, logCall]);
 
   const endCall = useCallback(() => {
+    logCall('ended');
     sendCallSignal('call-end');
     cleanupCall();
     setCallState('ended');
     setTimeout(() => setCallState('idle'), 2000);
-  }, [sendCallSignal, cleanupCall, setCallState]);
+  }, [sendCallSignal, cleanupCall, setCallState, logCall]);
 
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current) return false;
@@ -355,8 +389,11 @@ export function useCallManager(
         });
         return newStream;
       });
-      setCallState('active');
-      startQualityMonitor();
+        if (callStartTimeRef.current === 0) {
+          callStartTimeRef.current = Date.now();
+        }
+        setCallState('active');
+        startQualityMonitor();
     };
   }, [pcRef, setRemoteStream, setCallState, startQualityMonitor]);
 
