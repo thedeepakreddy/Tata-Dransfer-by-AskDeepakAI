@@ -131,6 +131,10 @@ export function useWebRTC(userName: string = '') {
     roleRef.current = clientRole;
     statusRef.current = 'connecting';
     
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    
     const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
 

@@ -167,7 +167,9 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
                   outline: 'none'
                 }}
               />
-              <button type="submit" className="primary-btn" disabled={manualCode.length < 6} style={{ width: '100%', maxWidth: '280px' }}>Connect</button>
+              <button type="submit" className="primary-btn" disabled={manualCode.length < 6 || status === 'connecting'} style={{ width: '100%', maxWidth: '280px' }}>
+                {status === 'connecting' ? 'Joining...' : 'Connect'}
+              </button>
             </form>
           </div>
         )}
