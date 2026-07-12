@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { useCallManager } from './useCallManager';
 
 export type Role = 'sender' | 'receiver' | null;
 export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
 export type ConnectionType = 'local' | 'relayed' | 'unknown';
+export type CallState = 'idle' | 'ringing' | 'incoming' | 'connecting' | 'active' | 'rejected' | 'ended';
+export type CallMode = 'audio' | 'video' | null;
+export interface CallQuality {
+  qualityTier: string;
+  pathLabel: string;
+}
 
 export interface FileMetadata {
   type: 'meta';
@@ -32,6 +39,22 @@ export interface ChatMessage {
 
 const CHUNK_SIZE = 16384; // 16 KB
 
+const VIDEO_CONSTRAINTS_HD = {
+  width: { ideal: 1280, min: 640 },
+  height: { ideal: 720, min: 480 },
+  frameRate: { ideal: 30, min: 20 },
+};
+
+const VIDEO_CONSTRAINTS_FALLBACK = {
+  width: { ideal: 854, min: 480 },
+  height: { ideal: 480, min: 360 },
+  frameRate: { ideal: 24, min: 15 },
+};
+
+const BITRATE_720P = 2_500_000; // 2.5 Mbps
+const BITRATE_480P = 1_200_000; // 1.2 Mbps
+const AUDIO_BITRATE = 64_000;   // 64 kbps Opus
+
 export function useWebRTC(userName: string = '') {
   const [role, setRole] = useState<Role>(null);
   const [roomId, setRoomId] = useState<string>('');
@@ -41,6 +64,34 @@ export function useWebRTC(userName: string = '') {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [peerName, setPeerName] = useState<string>('');
+
+  // Call state
+  const [callState, setCallState] = useState<CallState>('idle');
+  const [callMode, setCallMode] = useState<CallMode>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [callQuality, setCallQuality] = useState<CallQuality | null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+
+  // Call refs
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
+  const qualityMonitorHandleRef = useRef<NodeJS.Timeout | null>(null);
+  const activeResolutionTierRef = useRef<'720p'|'480p'>('720p');
+  const recorderHandleRef = useRef<{ stop: () => Promise<Blob> } | null>(null);
+  const callManagerRef = useRef<ReturnType<typeof useCallManager> | null>(null);
+
+  useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
+
+  const callManager = useCallManager(
+    pcRef, wsRef, dcRef, userNameRef, setMessages, roleRef,
+    callState, setCallState, callMode, setCallMode,
+    localStream, setLocalStream, remoteStream, setRemoteStream,
+    callQuality, setCallQuality, isScreenSharing, setIsScreenSharing,
+    isRecording, setIsRecording
+  );
+  callManagerRef.current = callManager;
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -156,6 +207,7 @@ export function useWebRTC(userName: string = '') {
     };
 
     pcRef.current = pc;
+    callManagerRef.current?.attachTrackHandler();
     return pc;
   }, []);
 
@@ -268,6 +320,8 @@ export function useWebRTC(userName: string = '') {
             text: msg.text,
             timestamp: msg.timestamp
           }]);
+        } else if (msg.type.startsWith('call-')) {
+          callManagerRef.current?.handleCallMessage(msg);
         }
       } else {
         handleFileChunk(event.data);
@@ -508,6 +562,14 @@ export function useWebRTC(userName: string = '') {
     initSignaling,
     sendFiles,
     sendChatMessage,
-    disconnect
+    disconnect,
+    ...callManager,
+    callState,
+    callMode,
+    localStream,
+    remoteStream,
+    callQuality,
+    isScreenSharing,
+    isRecording
   };
 }

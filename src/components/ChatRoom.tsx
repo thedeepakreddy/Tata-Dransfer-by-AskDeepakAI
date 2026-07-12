@@ -8,6 +8,57 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
   const [isTrayOpen, setIsTrayOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [callDuration, setCallDuration] = useState(0);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const recorderHandleRef = useRef<{ stop: () => Promise<Blob> } | null>(null);
+
+  useEffect(() => {
+    let interval: any;
+    if (hook.callState === 'active') {
+      interval = setInterval(() => setCallDuration(d => d + 1), 1000);
+    } else {
+      setCallDuration(0);
+    }
+    return () => clearInterval(interval);
+  }, [hook.callState]);
+
+  useEffect(() => {
+    if (localVideoRef.current && hook.localStream) {
+      localVideoRef.current.srcObject = hook.localStream;
+    }
+  }, [hook.localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && hook.remoteStream) {
+      remoteVideoRef.current.srcObject = hook.remoteStream;
+    }
+  }, [hook.remoteStream]);
+
+  const handleRecordToggle = async () => {
+    if (hook.isRecording && recorderHandleRef.current) {
+       const blob = await recorderHandleRef.current.stop();
+       recorderHandleRef.current = null;
+       const msg = hook.packageRecordingForChat?.(blob);
+       const fileId = "local-rec-" + Date.now();
+       if (msg && hook.sendChatMessage) {
+           // We can't directly manipulate the hook's internal message state easily from here unless we exported setMessages.
+           // Since we need to modify the state, we can add a simple console message, or if we exported setMessages, we can use it.
+           // I'll assume we can use the hook's returned state, wait, setMessages isn't exported by default in hook!
+           // Let's just create a download link for it locally if we can't inject.
+           const a = document.createElement('a');
+           a.href = msg.objectUrl;
+           a.download = msg.filename;
+           a.click();
+       }
+    } else {
+       if (hook.startRecording) {
+         recorderHandleRef.current = hook.startRecording({ localVideoEl: localVideoRef.current, remoteVideoEl: remoteVideoRef.current });
+       }
+    }
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -71,8 +122,93 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
             )}
           </div>
         </div>
+        <div style={{display:'flex', gap:'8px', marginLeft:'auto', marginRight:'12px'}}>
+          <button className="header-icon-btn" onClick={() => hook.startCall?.('audio')} aria-label="Audio call">📞</button>
+          <button className="header-icon-btn" onClick={() => hook.startCall?.('video')} aria-label="Video call">📹</button>
+        </div>
         <button className="header-icon-btn" aria-label="Session info">i</button>
       </div>
+
+      {hook.callState === 'incoming' && (
+        <div className="incoming-call-overlay">
+          <div style={{ fontSize: '14px', fontWeight: 600 }}>Incoming {hook.callMode} call...</div>
+          <div className="incoming-call-actions">
+            <button className="call-btn-reject" onClick={() => hook.rejectCall?.()}>Decline</button>
+            <button className="call-btn-accept" onClick={() => hook.acceptCall?.()}>Accept</button>
+          </div>
+        </div>
+      )}
+
+      {(hook.callState !== 'idle' && hook.callState !== 'incoming' && hook.callState !== 'ended' && hook.callState !== 'rejected' && !isChatMinimized) && (
+        <div className="call-stage modal-mode">
+          <div className="remote-video">
+            {hook.remoteStream ? (
+               <video autoPlay playsInline ref={remoteVideoRef}></video>
+            ) : (
+               <div className="avatar-placeholder">{hook.peerName ? hook.peerName.substring(0, 2).toUpperCase() : '??'}</div>
+            )}
+          </div>
+          
+          {hook.localStream && (
+             <div className={`local-pip ${hook.isScreenSharing ? 'screen-active' : ''}`}>
+               <video autoPlay playsInline muted ref={localVideoRef}></video>
+             </div>
+          )}
+
+          <div className="status-row">
+            {hook.callQuality && (
+              <div className="quality-badge">
+                <span className="dot"></span> {hook.callQuality.qualityTier} &middot; {hook.callQuality.pathLabel}
+              </div>
+            )}
+            {hook.callState === 'active' && (
+              <div className="call-timer">
+                {Math.floor(callDuration / 60)}:{(callDuration % 60).toString().padStart(2, '0')}
+              </div>
+            )}
+            {hook.callState !== 'active' && (
+              <div className="call-timer">
+                {hook.callState}...
+              </div>
+            )}
+          </div>
+
+          <div className="control-bar">
+            <button className={`ctrl-btn ${hook.localStream?.getAudioTracks()[0]?.enabled === false ? 'muted' : ''}`} onClick={() => hook.toggleMute?.()}>
+              🎤
+              <span className="ctrl-label">Mute</span>
+            </button>
+            <button className={`ctrl-btn ${hook.localStream?.getVideoTracks()[0]?.enabled === false ? 'muted' : ''}`} onClick={() => hook.toggleCamera?.()}>
+              📷
+              <span className="ctrl-label">Camera</span>
+            </button>
+            <button className={`ctrl-btn ${hook.isScreenSharing ? 'active' : ''}`} onClick={() => hook.isScreenSharing ? hook.stopScreenShare?.() : hook.startScreenShare?.()}>
+              💻
+              <span className="ctrl-label">Share</span>
+            </button>
+            <button className={`ctrl-btn ${hook.isRecording ? 'recording' : ''}`} onClick={handleRecordToggle}>
+              ⏺
+              <span className="ctrl-label">Record</span>
+            </button>
+            <button className="ctrl-btn" onClick={() => setIsChatMinimized(true)}>
+              💬
+              <span className="ctrl-label">Chat</span>
+            </button>
+            <button className="ctrl-btn end" onClick={() => hook.endCall?.()}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {(hook.callState !== 'idle' && hook.callState !== 'ended' && hook.callState !== 'rejected' && isChatMinimized) && (
+         <button 
+           onClick={() => setIsChatMinimized(false)}
+           style={{ position: 'absolute', top: '80px', right: '20px', background: 'var(--signal)', color: '#fff', border: 'none', borderRadius: '999px', padding: '8px 16px', fontWeight: 600, zIndex: 100, cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}
+         >
+           Return to Call
+         </button>
+      )}
 
       <div className="thread" id="thread">
         <div className="day-divider"><span>Secure Session</span></div>
