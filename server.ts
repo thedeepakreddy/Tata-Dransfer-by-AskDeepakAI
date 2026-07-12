@@ -58,6 +58,11 @@ async function startServer() {
 
   wss.on("connection", (ws) => {
     let currentRoomId: string | null = null;
+    let isAlive = true;
+
+    ws.on("pong", () => {
+      isAlive = true;
+    });
 
     ws.on("message", (message) => {
       try {
@@ -73,8 +78,12 @@ async function startServer() {
           }
 
           if (room.peers.size >= 2 && !room.peers.has(ws)) {
-            ws.send(JSON.stringify({ type: "error", message: "Room is full" }));
-            return;
+            // Assume the oldest peer is a ghost connection if the room is full
+            const oldestPeer = room.peers.values().next().value;
+            if (oldestPeer) {
+              oldestPeer.terminate();
+              room.peers.delete(oldestPeer);
+            }
           }
 
           room.peers.add(ws);
@@ -132,6 +141,24 @@ async function startServer() {
 
     ws.on("close", handleDisconnect);
     ws.on("error", handleDisconnect);
+
+    // Provide a way for the interval to check this socket
+    (ws as any).isAlive = isAlive;
+    ws.on("pong", () => {
+      (ws as any).isAlive = true;
+    });
+  });
+
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((ws: any) => {
+      if (ws.isAlive === false) return ws.terminate();
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 10000);
+
+  wss.on("close", () => {
+    clearInterval(heartbeatInterval);
   });
 
   // API routes
