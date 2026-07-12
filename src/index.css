@@ -706,6 +706,13 @@ h2.title {
 }
 
 /* ---------- thread ---------- */
+.thread {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 20px 0;
+  display: flex;
+  flex-direction: column;
+}
 
 .conn-note {
   display: flex; align-items: center; justify-content: center; gap: 7px;
