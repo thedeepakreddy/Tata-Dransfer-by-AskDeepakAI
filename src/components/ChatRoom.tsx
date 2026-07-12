@@ -141,7 +141,7 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
   };
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--paper)', backgroundImage: 'radial-gradient(circle at 50% 0%, #F7F8FA 0%, var(--paper) 60%)' }}>
+    <div className="chat-room-container" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--paper)', backgroundImage: 'radial-gradient(circle at 50% 0%, #F7F8FA 0%, var(--paper) 60%)', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       
       {/* chat header */}
       <div className="chat-header">
