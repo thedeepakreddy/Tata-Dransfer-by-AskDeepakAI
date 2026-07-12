@@ -102,6 +102,15 @@ export function Sender({ onBack, userName }: SenderProps) {
 
         <div className="panel" style={{ width: '100%' }}>
           {!isConnected && (
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <p className="panel-label" style={{ marginBottom: '12px' }}>Enter this pin manually or scan the QR code:</p>
+              <div style={{ background: 'var(--paper)', padding: '14px 32px', borderRadius: '16px', display: 'inline-block', border: '1px solid var(--hairline)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+                <strong style={{ fontSize: '36px', letterSpacing: '8px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
+              </div>
+            </div>
+          )}
+
+          {!isConnected && (
             <div className="ring-stage">
               <div className="ring"></div><div className="ring"></div><div className="ring"></div>
               <div className="qr-core">
@@ -132,20 +141,11 @@ export function Sender({ onBack, userName }: SenderProps) {
           <div className="status-line">
             {!isConnected && <span className="pulse-dot"></span>}
             <span>
-              {status === 'connecting' ? 'Waiting for scan…' : 
+              {status === 'connecting' ? 'Waiting for peer...' : 
                isConnected ? `Connected · ${connectionType === 'local' ? 'Local WiFi' : 'Relayed'}` : 
                'Disconnected'}
             </span>
           </div>
-          
-          {!isConnected && (
-            <div style={{ textAlign: 'center', marginTop: '24px' }}>
-              <p className="panel-label" style={{ marginBottom: '12px' }}>Scan the QR code, or enter this pin manually:</p>
-              <div style={{ background: 'var(--paper)', padding: '14px 32px', borderRadius: '16px', display: 'inline-block', border: '1px solid var(--hairline)' }}>
-                <strong style={{ fontSize: '32px', letterSpacing: '8px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </section>
