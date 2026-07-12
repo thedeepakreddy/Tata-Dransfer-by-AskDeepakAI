@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { CallMode, CallState, CallQuality, ChatMessage, Role } from './useWebRTC';
+import type { CallMode, CallState, CallQuality, ChatMessage, Role } from './useWebRTC';
 import { v4 as uuidv4 } from 'uuid';
 
 const VIDEO_CONSTRAINTS_HD = {
