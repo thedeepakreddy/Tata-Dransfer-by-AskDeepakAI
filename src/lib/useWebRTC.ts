@@ -84,14 +84,6 @@ export function useWebRTC(userName: string = '') {
 
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
-  const callManager = useCallManager(
-    pcRef, wsRef, dcRef, userNameRef, setMessages, roleRef,
-    callState, setCallState, callMode, setCallMode,
-    localStream, setLocalStream, remoteStream, setRemoteStream,
-    callQuality, setCallQuality, isScreenSharing, setIsScreenSharing,
-    isRecording, setIsRecording
-  );
-  callManagerRef.current = callManager;
 
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -113,6 +105,15 @@ export function useWebRTC(userName: string = '') {
   const sendQueueRef = useRef<File[]>([]);
   const isSendingRef = useRef(false);
   const receiveBufferRef = useRef<Record<string, { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata }>>({});
+
+  const callManager = useCallManager(
+    pcRef, wsRef, dcRef, userNameRef, setMessages, roleRef,
+    callState, setCallState, callMode, setCallMode,
+    localStream, setLocalStream, remoteStream, setRemoteStream,
+    callQuality, setCallQuality, isScreenSharing, setIsScreenSharing,
+    isRecording, setIsRecording
+  );
+  callManagerRef.current = callManager;
 
   const getWsUrl = () => {
     return 'wss://tata-dransfer-by-askdeepakai.onrender.com';
