@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCallManager } from './useCallManager';
 
 export type Role = 'sender' | 'receiver' | null;
-export type ConnectionState = 'idle' | 'connecting' | 'negotiating' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
 export type ConnectionType = 'local' | 'relayed' | 'unknown';
 export type CallState = 'idle' | 'ringing' | 'incoming' | 'connecting' | 'active' | 'rejected' | 'ended';
 export type CallMode = 'audio' | 'video' | null;
@@ -146,7 +146,7 @@ export function useWebRTC(userName: string = '') {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
-          setStatus('negotiating');
+          setStatus('connected');
           if (msg.isInitiator) {
             await startWebRTC();
           }
@@ -225,8 +225,7 @@ export function useWebRTC(userName: string = '') {
 
     pc.oniceconnectionstatechange = () => {
       if (pc.iceConnectionState === 'failed') {
-        setErrorMsg('Connection failed. Try switching both devices to the same WiFi network.');
-        setStatus('error');
+        setConnectionType('relayed');
       }
     };
 
