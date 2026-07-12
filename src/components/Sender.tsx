@@ -20,7 +20,7 @@ export function Sender({ onBack, userName }: SenderProps) {
 
   useEffect(() => {
     const newRoomId = uuidv4().substring(0, 6).toUpperCase();
-    initSignaling(newRoomId, 'sender');
+    initSignaling(newRoomId, true);
     return () => disconnect();
   }, [initSignaling, disconnect]);
 

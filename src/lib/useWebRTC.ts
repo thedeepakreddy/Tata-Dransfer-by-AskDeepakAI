@@ -157,7 +157,10 @@ export function useWebRTC(userName: string = '') {
         } else if (msg.type === 'ice-candidate') {
           await handleIceCandidate(msg.payload);
         } else if (msg.type === 'chat') {
-          setMessages(prev => [...prev, msg.payload]);
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.payload.id)) return prev;
+            return [...prev, msg.payload];
+          });
         } else if (msg.type === 'typing') {
           setIsPeerTyping(true);
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -365,12 +368,15 @@ export function useWebRTC(userName: string = '') {
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
           typingTimeoutRef.current = setTimeout(() => setIsPeerTyping(false), 2500);
         } else if (msg.type === 'chat') {
-          setMessages(prev => [...prev, {
-            id: msg.id,
-            senderRole: roleRef.current === 'sender' ? 'receiver' : 'sender',
-            text: msg.text,
-            timestamp: msg.timestamp
-          }]);
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, {
+              id: msg.id,
+              senderRole: roleRef.current === 'sender' ? 'receiver' : 'sender',
+              text: msg.text,
+              timestamp: msg.timestamp
+            }];
+          });
         } else if (msg.type.startsWith('call-')) {
           console.log('Received call message:', msg);
           callManagerRef.current?.handleCallMessage(msg);
@@ -579,7 +585,8 @@ export function useWebRTC(userName: string = '') {
     const msg: ChatMessage = { id: uuidv4(), senderRole: roleRef.current || 'system', text, timestamp: Date.now() };
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
-    } else if (dcRef.current?.readyState === 'open') {
+    }
+    if (dcRef.current?.readyState === 'open') {
       try { dcRef.current.send(JSON.stringify({ type: 'chat', ...msg })); } catch (e) { console.error('DC send error', e); }
     }
     setMessages(prev => [...prev, msg]);
@@ -588,7 +595,8 @@ export function useWebRTC(userName: string = '') {
   const sendTyping = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
-    } else if (dcRef.current?.readyState === 'open') {
+    }
+    if (dcRef.current?.readyState === 'open') {
       try { dcRef.current.send(JSON.stringify({ type: 'typing' })); } catch (e) { console.error('DC send error', e); }
     }
   }, []);

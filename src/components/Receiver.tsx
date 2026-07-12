@@ -26,7 +26,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
     const params = new URLSearchParams(window.location.search);
     const roomFromUrl = params.get('room');
     if (roomFromUrl) {
-      initSignaling(roomFromUrl, 'receiver');
+      initSignaling(roomFromUrl, false);
       return;
     }
 
@@ -40,7 +40,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
           const room = url.searchParams.get('room');
           if (room) {
             html5QrCode.stop().catch(console.error);
-            initSignaling(room, 'receiver');
+            initSignaling(room, false);
             return;
           }
         }
@@ -48,7 +48,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
         const data = JSON.parse(decodedText);
         if (data.roomId) {
           html5QrCode.stop().catch(console.error);
-          initSignaling(data.roomId, 'receiver');
+          initSignaling(data.roomId, false);
         } else {
            setScanError('Invalid QR code format');
         }
@@ -87,7 +87,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
   const handleManualJoin = (e: FormEvent) => {
     e.preventDefault();
     if (manualCode.length >= 6) {
-      initSignaling(manualCode.toUpperCase(), 'receiver');
+      initSignaling(manualCode.toUpperCase(), false);
     }
   };
 
