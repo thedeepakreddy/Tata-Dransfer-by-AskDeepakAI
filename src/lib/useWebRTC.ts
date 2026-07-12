@@ -162,6 +162,8 @@ export function useWebRTC(userName: string = '') {
           setIsPeerTyping(true);
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
           typingTimeoutRef.current = setTimeout(() => setIsPeerTyping(false), 2500);
+        } else if (msg.type === 'name_exchange') {
+          setPeerName(msg.payload.userName);
         } else if (msg.type === 'call-signal') {
           callManagerRef.current?.handleCallMessage({ type: 'call-signal', ...msg.payload });
         } else if (msg.type === 'peer-disconnected') {
@@ -197,6 +199,8 @@ export function useWebRTC(userName: string = '') {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: 'stun:global.stun.twilio.com:3478' },
         { urls: 'stun:openrelay.metered.ca:80' },
         { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
@@ -573,19 +577,19 @@ export function useWebRTC(userName: string = '') {
 
   const sendChatMessage = useCallback((text: string) => {
     const msg: ChatMessage = { id: uuidv4(), senderRole: roleRef.current || 'system', text, timestamp: Date.now() };
-    if (dcRef.current?.readyState === 'open') {
-      dcRef.current.send(JSON.stringify({ type: 'chat', ...msg }));
-    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
+    } else if (dcRef.current?.readyState === 'open') {
+      try { dcRef.current.send(JSON.stringify({ type: 'chat', ...msg })); } catch (e) { console.error('DC send error', e); }
     }
     setMessages(prev => [...prev, msg]);
   }, []);
 
   const sendTyping = useCallback(() => {
-    if (dcRef.current?.readyState === 'open') {
-      dcRef.current.send(JSON.stringify({ type: 'typing' }));
-    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
+    } else if (dcRef.current?.readyState === 'open') {
+      try { dcRef.current.send(JSON.stringify({ type: 'typing' })); } catch (e) { console.error('DC send error', e); }
     }
   }, []);
 

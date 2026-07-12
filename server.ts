@@ -118,10 +118,14 @@ async function startServer() {
           const room = rooms.get(currentRoomId);
           if (room) {
             room.lastActivity = Date.now();
+            console.log(`Relaying ${type} from ${role} in room ${currentRoomId} to ${room.peers.size} peers`);
             // Relay to other peer
             for (const peer of room.peers) {
               if (peer !== ws && peer.readyState === WebSocket.OPEN) {
+                console.log(`Sending ${type} to peer`);
                 peer.send(JSON.stringify({ type, payload, roomId }));
+              } else {
+                console.log(`Not sending ${type}: peer===ws? ${peer===ws}, readyState: ${peer.readyState}`);
               }
             }
           }

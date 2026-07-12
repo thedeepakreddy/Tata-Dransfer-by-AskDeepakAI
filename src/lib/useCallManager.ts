@@ -51,12 +51,12 @@ export function useCallManager(
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
   const sendCallSignal = useCallback((type: string, payload: any = {}) => {
-    if (dcRef.current?.readyState === 'open') {
-      console.log('Sending call signal via DC:', type, payload);
-      dcRef.current.send(JSON.stringify({ type, ...payload }));
-    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('Sending call signal via WS fallback:', type, payload);
       wsRef.current.send(JSON.stringify({ type: 'call-signal', payload: { type, ...payload } }));
+    } else if (dcRef.current?.readyState === 'open') {
+      console.log('Sending call signal via DC:', type, payload);
+      try { dcRef.current.send(JSON.stringify({ type, ...payload })); } catch (e) { console.error('DC send err', e); }
     } else {
       console.log('Cannot send call signal, no connection available');
     }
