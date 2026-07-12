@@ -20,11 +20,12 @@
   }
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; touch-action: manipulation; }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--paper);
   background-image: radial-gradient(circle at 50% 0%, #F7F8FA 0%, var(--paper) 60%);
   font-family: 'Inter', sans-serif;
@@ -47,7 +48,7 @@ body {
 
 .loader-screen {
   position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
+  top: 0; left: 0; width: 100vw; height: 100vh; height: 100dvh;
   background: var(--paper);
   z-index: 9999;
   display: flex;
@@ -142,12 +143,33 @@ body {
   display: flex;
   flex-direction: column;
 }
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
 
 @media (max-width: 767px) {
   .canvas {
-    padding: 16px 20px 32px;
+    padding: 0; /* Removing padding so ChatRoom header and composer sit flush */
     min-height: auto;
-    overflow-y: auto;
+    overflow: hidden;
+  }
+  .screen {
+    padding: 16px 20px 32px;
+  }
+  #chat-room {
+    padding: 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }
 
