@@ -88,6 +88,7 @@ export function useWebRTC(userName: string = '') {
   const wsRef = useRef<WebSocket | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
+  const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
   
   // Refs for state accessed inside callbacks
   const roomIdRef = useRef<string>('');
@@ -172,6 +173,10 @@ export function useWebRTC(userName: string = '') {
   }, []);
 
   const createPeerConnection = useCallback(() => {
+    if (pcRef.current) {
+      pcRef.current.close();
+    }
+    iceCandidateQueueRef.current = [];
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -247,6 +252,20 @@ export function useWebRTC(userName: string = '') {
     }));
   };
 
+  const flushIceQueue = async () => {
+    if (pcRef.current && iceCandidateQueueRef.current.length > 0) {
+      const queue = [...iceCandidateQueueRef.current];
+      iceCandidateQueueRef.current = [];
+      for (const candidate of queue) {
+        try {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error('Error flushing ice candidate', e);
+        }
+      }
+    }
+  };
+
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     const pc = createPeerConnection();
     
@@ -255,6 +274,7 @@ export function useWebRTC(userName: string = '') {
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    flushIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
@@ -268,15 +288,20 @@ export function useWebRTC(userName: string = '') {
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
     if (pcRef.current) {
       await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      flushIceQueue();
     }
   };
 
   const handleIceCandidate = async (candidate: RTCIceCandidateInit) => {
     if (pcRef.current) {
-      try {
-        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (e) {
-        console.error('Error adding received ice candidate', e);
+      if (pcRef.current.remoteDescription && pcRef.current.remoteDescription.type) {
+        try {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error('Error adding received ice candidate', e);
+        }
+      } else {
+        iceCandidateQueueRef.current.push(candidate);
       }
     }
   };
