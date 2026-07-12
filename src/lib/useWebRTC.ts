@@ -138,7 +138,7 @@ export function useWebRTC(userName: string = '') {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
-          if (clientRole === 'sender') {
+          if (msg.isInitiator) {
             await startWebRTC();
           }
         } else if (msg.type === 'offer') {

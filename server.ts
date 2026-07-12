@@ -82,10 +82,10 @@ async function startServer() {
           console.log(`Peer joined room: ${roomId}. Total peers: ${room.peers.size}`);
 
           if (room.peers.size === 2) {
-            // Notify both peers they are ready
-            for (const peer of room.peers) {
-              peer.send(JSON.stringify({ type: "ready", roomId }));
-            }
+            // Notify both peers they are ready, assign initiator role to the first peer in the set
+            const peersArray = Array.from(room.peers);
+            peersArray[0].send(JSON.stringify({ type: "ready", roomId, isInitiator: true }));
+            peersArray[1].send(JSON.stringify({ type: "ready", roomId, isInitiator: false }));
           }
         } else if (type === "offer" || type === "answer" || type === "ice-candidate") {
           if (!currentRoomId) return;
