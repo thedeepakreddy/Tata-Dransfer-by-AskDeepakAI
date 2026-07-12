@@ -259,7 +259,13 @@ export function useWebRTC(userName: string = '') {
     }
   };
 
-  const startWebRTC = async () => {
+  const startWebRTC = async (isInitiator: boolean) => {
+    if (!isInitiator) {
+      console.log('Not initiator, waiting for offer...');
+      return;
+    }
+    
+    console.log('Is initiator, creating offer...');
     const pc = createPeerConnection();
     
     // Create DataChannel (Sender)
