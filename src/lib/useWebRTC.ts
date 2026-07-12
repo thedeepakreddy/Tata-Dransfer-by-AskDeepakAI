@@ -322,6 +322,7 @@ export function useWebRTC(userName: string = '') {
             timestamp: msg.timestamp
           }]);
         } else if (msg.type.startsWith('call-')) {
+          console.log('Received call message:', msg);
           callManagerRef.current?.handleCallMessage(msg);
         }
       } else {

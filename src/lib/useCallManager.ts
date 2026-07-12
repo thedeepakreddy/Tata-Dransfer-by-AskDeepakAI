@@ -51,7 +51,10 @@ export function useCallManager(
 
   const sendCallSignal = useCallback((type: string, payload: any = {}) => {
     if (dcRef.current?.readyState === 'open') {
+      console.log('Sending call signal:', type, payload);
       dcRef.current.send(JSON.stringify({ type, ...payload }));
+    } else {
+      console.log('Cannot send call signal, data channel not open');
     }
   }, [dcRef]);
 

@@ -1,4 +1,39 @@
 import React, { useState, useRef, useEffect, ChangeEvent, FormEvent } from 'react';
+
+function useRingtone(isRinging: boolean) {
+  useEffect(() => {
+    if (!isRinging) return;
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    let interval: any;
+    
+    const playRing = () => {
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(480, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.2);
+    };
+    
+    playRing();
+    interval = setInterval(playRing, 2000);
+    
+    return () => {
+      clearInterval(interval);
+      ctx.close().catch(() => {});
+    };
+  }, [isRinging]);
+}
+
 import { useWebRTC, ChatMessage } from '../lib/useWebRTC';
 import { formatBytes } from '../lib/utils';
 
@@ -14,6 +49,8 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const recorderHandleRef = useRef<{ stop: () => Promise<Blob> } | null>(null);
+
+  useRingtone(hook.callState === 'ringing' || hook.callState === 'incoming');
 
   useEffect(() => {
     let interval: any;
@@ -122,7 +159,7 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
             )}
           </div>
         </div>
-        <div style={{display:'flex', gap:'8px', marginLeft:'auto', marginRight:'12px'}}>
+        <div style={{display:'flex', gap:'8px', marginLeft:'auto', marginRight:'12px', flexShrink: 0}}>
           <button className="header-icon-btn" onClick={() => hook.startCall?.('audio')} aria-label="Audio call">📞</button>
           <button className="header-icon-btn" onClick={() => hook.startCall?.('video')} aria-label="Video call">📹</button>
         </div>
