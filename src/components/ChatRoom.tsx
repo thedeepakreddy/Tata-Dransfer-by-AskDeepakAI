@@ -154,15 +154,23 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
             {status === 'disconnected' ? (
               <span style={{ color: '#E11D48' }}>Disconnected &middot; Code: {hook.roomId}</span>
             ) : (
-              <><span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'} &middot; Code: {hook.roomId}</>
+              <><span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'}</>
             )}
           </div>
         </div>
-        <div style={{display:'flex', gap:'8px', marginLeft:'auto', marginRight:'12px', flexShrink: 0}}>
-          <button className="header-icon-btn" onClick={() => hook.startCall?.('audio')} aria-label="Audio call">📞</button>
-          <button className="header-icon-btn" onClick={() => hook.startCall?.('video')} aria-label="Video call">📹</button>
+        <div className="header-actions">
+          <button className="header-icon-btn" onClick={() => hook.startCall?.('audio')} aria-label="Audio call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 5c0-.6.4-1 1-1h3l2 5-2 1.3a9 9 0 0 0 5.7 5.7L15 14l5 2v3c0 .6-.4 1-1 1A15 15 0 0 1 4 5Z"/>
+            </svg>
+          </button>
+          <button className="header-icon-btn" onClick={() => hook.startCall?.('video')} aria-label="Video call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="6" width="12" height="12" rx="2.5"/>
+              <path d="M15 10.2 21 7v10l-6-3.2"/>
+            </svg>
+          </button>
         </div>
-        <button className="header-icon-btn" aria-label="Session info">i</button>
       </div>
 
       {hook.callState === 'incoming' && (
@@ -345,10 +353,10 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
           onChange={handleFileSelect}
         />
         <div className={`attach-tray ${isTrayOpen ? 'open' : ''}`} id="attachTray">
-          <button type="button" className="attach-option" onClick={() => triggerFileSelect('image/*')}><div className="ic">IMG</div><span>Photo</span></button>
-          <button type="button" className="attach-option" onClick={() => triggerFileSelect('.pdf,.doc,.docx,.txt')}><div className="ic">DOC</div><span>File</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('image/*')}><div className="ic">IMG</div><span>Photos</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('video/*')}><div className="ic">VID</div><span>Videos</span></button>
+          <button type="button" className="attach-option" onClick={() => triggerFileSelect('.pdf,.doc,.docx,.txt')}><div className="ic">DOC</div><span>Files</span></button>
           <button type="button" className="attach-option" onClick={() => triggerFileSelect('audio/*')}><div className="ic">AUD</div><span>Audio</span></button>
-          <button type="button" className="attach-option" onClick={() => triggerFileSelect('video/*')}><div className="ic">VID</div><span>Video</span></button>
         </div>
         <div className="composer-row">
           <button type="button" className={`plus-btn ${isTrayOpen ? 'open' : ''}`} onClick={() => setIsTrayOpen(!isTrayOpen)}>+</button>
@@ -362,7 +370,7 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
               onKeyDown={onKeyDown}
             />
           </div>
-          <button type="button" className="send-btn" disabled={!inputText.trim() || !['connected', 'transferring', 'complete'].includes(status)} onClick={handleSend}>➤</button>
+          <button type="button" className="send-btn" disabled={!inputText.trim()} onClick={handleSend}>➤</button>
         </div>
       </div>
     </div>
