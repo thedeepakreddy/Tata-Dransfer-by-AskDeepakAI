@@ -91,7 +91,7 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
     }
   };
 
-  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected';
+  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected' || status === 'negotiating';
 
   if (isConnected) {
     return <ChatRoom hook={hook} onBack={onBack} />;

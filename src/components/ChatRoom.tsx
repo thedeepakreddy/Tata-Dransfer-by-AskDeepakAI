@@ -153,10 +153,10 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
           <div className="peer-status">
             {status === 'disconnected' ? (
               <span style={{ color: '#E11D48' }}>Disconnected &middot; Code: {hook.roomId}</span>
+            ) : status === 'negotiating' ? (
+              <><span className="pulse-dot"></span>Connecting... &middot; Code: {hook.roomId}</>
             ) : (
-              <>
-                <span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'} &middot; Code: {hook.roomId}
-              </>
+              <><span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'} &middot; Code: {hook.roomId}</>
             )}
           </div>
         </div>
@@ -353,13 +353,14 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
           <button type="button" className="attach-option" onClick={() => triggerFileSelect('video/*')}><div className="ic">VID</div><span>Video</span></button>
         </div>
         <div className="composer-row">
-          <button type="button" className={`plus-btn ${isTrayOpen ? 'open' : ''}`} onClick={() => setIsTrayOpen(!isTrayOpen)}>+</button>
+          <button type="button" className={`plus-btn ${isTrayOpen ? 'open' : ''}`} disabled={status === 'negotiating'} onClick={() => setIsTrayOpen(!isTrayOpen)}>+</button>
           <div className="input-wrap">
             <textarea 
               className="msg-input" 
               rows={1} 
-              placeholder="Message" 
+              placeholder={status === 'negotiating' ? 'Establishing connection...' : 'Message'} 
               value={inputText}
+              disabled={status === 'negotiating'}
               onChange={handleInput}
               onKeyDown={onKeyDown}
             />

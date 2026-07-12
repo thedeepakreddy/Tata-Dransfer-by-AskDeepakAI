@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCallManager } from './useCallManager';
 
 export type Role = 'sender' | 'receiver' | null;
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
+export type ConnectionState = 'idle' | 'connecting' | 'negotiating' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
 export type ConnectionType = 'local' | 'relayed' | 'unknown';
 export type CallState = 'idle' | 'ringing' | 'incoming' | 'connecting' | 'active' | 'rejected' | 'ended';
 export type CallMode = 'audio' | 'video' | null;
@@ -146,6 +146,7 @@ export function useWebRTC(userName: string = '') {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
+          setStatus('negotiating');
           if (msg.isInitiator) {
             await startWebRTC();
           }
@@ -188,7 +189,10 @@ export function useWebRTC(userName: string = '') {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun.cloudflare.com:3478' }
+        { urls: 'stun:openrelay.metered.ca:80' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
       ],
     });
 

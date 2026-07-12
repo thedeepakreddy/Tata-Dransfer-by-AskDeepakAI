@@ -44,7 +44,7 @@ export function Sender({ onBack, userName }: SenderProps) {
     }
   };
 
-  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected';
+  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected' || status === 'negotiating';
   const hasFiles = Object.keys(filesProgress).length > 0;
 
   if (isConnected) {
