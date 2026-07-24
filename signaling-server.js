@@ -7,28 +7,27 @@ import { WebSocketServer, WebSocket } from 'ws';
 const PORT = process.env.PORT || 8080;
 const wss = new WebSocketServer({ port: PORT });
 
-// roomId -> Set<ws>
+// roomId -> { peers: Set<ws>, lastActivity: number }
 const rooms = new Map();
 
 // Rooms auto-expire after 10 minutes of inactivity
 const ROOM_TTL_MS = 10 * 60 * 1000;
-const roomTimers = new Map();
 
-function resetRoomTimer(roomId) {
-  if (roomTimers.has(roomId)) clearTimeout(roomTimers.get(roomId));
-  const timer = setTimeout(() => {
-    const room = rooms.get(roomId);
-    if (room) {
-      room.forEach(client => client.close());
+// Cleanup inactive rooms every 60 seconds
+setInterval(() => {
+  const now = Date.now();
+  for (const [roomId, room] of rooms.entries()) {
+    if (now - room.lastActivity > ROOM_TTL_MS) {
+      room.peers.forEach(client => client.close());
       rooms.delete(roomId);
+      console.log(`Cleaned up inactive room: ${roomId}`);
     }
-    roomTimers.delete(roomId);
-  }, ROOM_TTL_MS);
-  roomTimers.set(roomId, timer);
-}
+  }
+}, 60 * 1000);
 
 wss.on('connection', (ws) => {
   ws.roomId = null;
+  ws.role = null;
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -40,68 +39,109 @@ wss.on('connection', (ws) => {
       return; // ignore malformed messages
     }
 
+    const { type, roomId, payload, role } = msg;
+
     // --- JOIN A ROOM ---
-    if (msg.type === 'join') {
-      const { roomId } = msg;
+    if (type === 'join') {
       if (!roomId) return;
 
-      if (!rooms.has(roomId)) rooms.set(roomId, new Set());
+      if (!rooms.has(roomId)) {
+        rooms.set(roomId, { peers: new Set(), lastActivity: Date.now() });
+      }
       const room = rooms.get(roomId);
 
-      if (room.size >= 2) {
-        ws.send(JSON.stringify({ type: 'error', message: 'Room is full' })); // matched to useWebRTC.ts expectation
-        return;
+      // Handle reconnection: if room is full, kick existing peer with same role
+      if (room.peers.size >= 2 && !room.peers.has(ws)) {
+        let kicked = false;
+        for (const peer of room.peers) {
+          if (peer.role === role) {
+            peer.terminate();
+            room.peers.delete(peer);
+            kicked = true;
+            console.log(`Kicked stale ${role} from room ${roomId}`);
+            break;
+          }
+        }
+        if (!kicked) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Room is full' }));
+          return;
+        }
       }
 
-      room.add(ws);
+      ws.role = role;
       ws.roomId = roomId;
-      resetRoomTimer(roomId);
+      room.peers.add(ws);
+      room.lastActivity = Date.now();
 
-      ws.send(JSON.stringify({ type: 'joined', roomId, peerCount: room.size }));
+      console.log(`Peer (${role}) joined room: ${roomId}. Total peers: ${room.peers.size}`);
 
-      // Once 2 peers are present, tell BOTH it's time to start the WebRTC handshake
-      if (room.size === 2) {
-        room.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({ type: 'ready' }));
-          }
-        });
+      // Once 2 peers are present, tell them to start the WebRTC handshake
+      // First peer becomes the initiator (creates the offer)
+      if (room.peers.size === 2) {
+        const peersArray = Array.from(room.peers);
+        peersArray[0].send(JSON.stringify({ type: 'ready', roomId, isInitiator: true }));
+        peersArray[1].send(JSON.stringify({ type: 'ready', roomId, isInitiator: false }));
+        console.log(`Room ${roomId} is ready. Sent initiator signals.`);
       }
       return;
     }
 
-    // --- RELAY SIGNALING MESSAGES TO THE OTHER PEER ONLY ---
-    if (['offer', 'answer', 'ice-candidate'].includes(msg.type)) {
+    // --- RELAY ALL SIGNALING AND APPLICATION MESSAGES ---
+    if (
+      type === 'offer' ||
+      type === 'answer' ||
+      type === 'ice-candidate' ||
+      type === 'chat' ||
+      type === 'typing' ||
+      type === 'call-signal' ||
+      type === 'name_exchange'
+    ) {
+      if (!ws.roomId) return;
       const room = rooms.get(ws.roomId);
       if (!room) return;
-      resetRoomTimer(ws.roomId);
-      room.forEach(client => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(msg));
+      room.lastActivity = Date.now();
+
+      // Relay to the OTHER peer only
+      for (const peer of room.peers) {
+        if (peer !== ws && peer.readyState === WebSocket.OPEN) {
+          peer.send(JSON.stringify({ type, payload, roomId: ws.roomId }));
         }
-      });
+      }
+      return;
+    }
+
+    // --- LEAVE ---
+    if (type === 'leave') {
+      handleDisconnect(ws);
     }
   });
 
-  ws.on('close', () => {
-    if (ws.roomId && rooms.has(ws.roomId)) {
-      const room = rooms.get(ws.roomId);
-      room.delete(ws);
-      room.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 'peer-disconnected' })); // matched to useWebRTC.ts expectation
-        }
-      });
-      if (room.size === 0) {
-        rooms.delete(ws.roomId);
-        if (roomTimers.has(ws.roomId)) {
-          clearTimeout(roomTimers.get(ws.roomId));
-          roomTimers.delete(ws.roomId);
-        }
-      }
-    }
-  });
+  ws.on('close', () => handleDisconnect(ws));
+  ws.on('error', () => handleDisconnect(ws));
 });
+
+function handleDisconnect(ws) {
+  if (ws.roomId && rooms.has(ws.roomId)) {
+    const room = rooms.get(ws.roomId);
+    room.peers.delete(ws);
+    room.lastActivity = Date.now();
+
+    console.log(`Peer (${ws.role}) left room: ${ws.roomId}. Remaining peers: ${room.peers.size}`);
+
+    // Notify remaining peer
+    room.peers.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'peer-disconnected', roomId: ws.roomId }));
+      }
+    });
+
+    if (room.peers.size === 0) {
+      rooms.delete(ws.roomId);
+      console.log(`Deleted empty room: ${ws.roomId}`);
+    }
+    ws.roomId = null;
+  }
+}
 
 // Keep connections alive through Render's proxy (prevents silent drops)
 const heartbeat = setInterval(() => {
@@ -110,7 +150,7 @@ const heartbeat = setInterval(() => {
     ws.isAlive = false;
     ws.ping();
   });
-}, 30000);
+}, 25000); // 25s interval - well within Render's 30s timeout
 
 wss.on('close', () => clearInterval(heartbeat));
 
