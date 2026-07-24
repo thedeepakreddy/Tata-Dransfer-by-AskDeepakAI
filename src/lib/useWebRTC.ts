@@ -124,7 +124,8 @@ export function useWebRTC(userName: string = '') {
     if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
       return `ws://${loc.host}/signaling`;
     }
-    return `wss://${loc.host}/signaling`;
+    // In production, always point to the dedicated Render signaling server
+    return `wss://tata-dransfer-by-askdeepakai.onrender.com`;
   };
 
   const initSignaling = useCallback((room: string, clientRole: Role) => {
