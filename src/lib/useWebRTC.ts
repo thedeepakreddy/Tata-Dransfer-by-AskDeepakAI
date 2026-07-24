@@ -120,7 +120,11 @@ export function useWebRTC(userName: string = '') {
   callManagerRef.current = callManager;
 
   const getWsUrl = () => {
-    return 'wss://tata-dransfer-by-askdeepakai.onrender.com';
+    const loc = window.location;
+    if (loc.hostname === 'localhost' || loc.hostname === '127.0.0.1') {
+      return `ws://${loc.host}/signaling`;
+    }
+    return `wss://${loc.host}/signaling`;
   };
 
   const initSignaling = useCallback((room: string, clientRole: Role) => {
@@ -148,7 +152,7 @@ export function useWebRTC(userName: string = '') {
         if (msg.type === 'ready') {
           setStatus('connected');
           if (msg.isInitiator) {
-            await startWebRTC();
+            await startWebRTC(true);
           }
         } else if (msg.type === 'offer') {
           await handleOffer(msg.payload);
@@ -304,7 +308,7 @@ export function useWebRTC(userName: string = '') {
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    flushIceQueue();
+    await flushIceQueue();
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
