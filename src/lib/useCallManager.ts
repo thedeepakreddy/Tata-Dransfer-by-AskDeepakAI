@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { CallMode, CallState, CallQuality, ChatMessage, Role } from './useWebRTC';
 import { v4 as uuidv4 } from 'uuid';
 

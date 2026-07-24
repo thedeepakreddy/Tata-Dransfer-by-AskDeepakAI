@@ -276,6 +276,7 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
           if (msg.fileId) {
             const file = filesProgress[msg.fileId];
             if (!file) return null;
+            const isSender = msg.senderRole === role;
 
             let iconText = 'DOC';
             if (file.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)) iconText = 'IMG';
@@ -295,26 +296,49 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
                         a.download = file.name;
                         a.click();
                      }
-                  }} style={{ cursor: file.status === 'complete' ? 'pointer' : 'default' }}>
+                  }} style={{ cursor: file.status === 'complete' && file.blobUrl ? 'pointer' : 'default' }}>
                     <div className="file-icon">{iconText}</div>
                     <div className="file-info">
                       <div className="file-name">{file.name}</div>
                       <div className="file-sub">
-                        {formatBytes(file.size)} &middot; {file.status === 'complete' ? 'sent' : `sending — ${Math.round(pct)}%`}
+                        {formatBytes(file.size)} &middot; {
+                          file.status === 'complete' ? (isSender ? 'sent' : 'received') :
+                          file.status === 'waiting_for_accept' ? 'pending acceptance' :
+                          file.status === 'declined' ? 'declined' :
+                          `${isSender ? 'sending' : 'receiving'} — ${Math.round(pct)}%`
+                        }
                       </div>
                     </div>
                     {file.status === 'complete' ? (
                       <div className="file-check">✓</div>
-                    ) : (
+                    ) : file.status === 'declined' ? (
+                      <div className="file-check">✕</div>
+                    ) : file.status !== 'waiting_for_accept' ? (
                       <div className="file-progress-ring">
                         <svg viewBox="0 0 26 26">
                           <circle className="ring-track" cx="13" cy="13" r="11"></circle>
                           <circle className="ring-fill" cx="13" cy="13" r="11" strokeDasharray="69.1" strokeDashoffset={dashOffset}></circle>
                         </svg>
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                  <div className="msg-time">{file.status === 'complete' ? timeString : 'Transferring…'}</div>
+                  {file.status === 'waiting_for_accept' && !isSender && (
+                    <div className="flex gap-2 mt-2 ml-1">
+                      <button 
+                        onClick={() => hook.acceptFileOffer && hook.acceptFileOffer(file.fileId)}
+                        className="px-3 py-1 bg-[#4C5FD5] text-white text-xs font-semibold rounded-full hover:bg-blue-600 transition-colors"
+                      >
+                        Accept
+                      </button>
+                      <button 
+                        onClick={() => hook.declineFileOffer && hook.declineFileOffer(file.fileId)}
+                        className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-300 transition-colors"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+                  <div className="msg-time">{file.status === 'complete' || file.status === 'declined' ? timeString : 'Transferring…'}</div>
                 </div>
               </div>
             );
