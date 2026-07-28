@@ -1,28 +1,66 @@
 # Tata Dransfer
-By AskDeepakAI
 
-Tata Dransfer is a lightning-fast, highly secure peer-to-peer file transfer and chat application. It allows devices on the same local network or across the internet to connect via WebRTC, enabling direct, end-to-end encrypted file sharing and messaging without any data ever touching a central server.
+Tata Dransfer is a secure, high-performance peer-to-peer (P2P) file sharing and real-time communication platform. Engineered for maximum reliability and privacy, it facilitates seamless data transfer, messaging, and audio/video calls directly between devices without intermediate storage servers.
 
-## Features
-- **End-to-End Encrypted (E2EE):** True WebRTC DTLS/SRTP encryption.
-- **Local WiFi Transfer:** Directly transfer gigabytes of data between devices in seconds.
-- **Unified Chat Room:** Seamlessly chat and transfer files in a sleek, modern, glassmorphic UI.
-- **Cross-Platform:** Works entirely in the browser on mobile, desktop, iOS, and Android.
+## Key Features
 
-## Setup & Deployment
+*   **Massive File Transfers (Direct-to-Disk):** Supports transferring files of unlimited size (100GB+) by leveraging the modern File System Access API. Incoming data streams directly to the local hard drive, maintaining near-zero memory footprint and preventing browser crashes during large transfers.
+*   **End-to-End Encryption (E2EE):** All communications, including chat messages and file payloads, are encrypted using AES-GCM prior to transmission. Data remains secure in transit across both WebRTC data channels and WebSocket signaling fallbacks.
+*   **Hybrid Signaling Architecture:** Employs a robust signaling mechanism that prioritizes high-speed WebRTC connections. If strict network topologies prevent direct P2P connections, the system seamlessly falls back to a dedicated WebSocket relay, ensuring guaranteed message delivery.
+*   **Real-Time Communication:** Features low-latency text chat with typing indicators and high-definition audio/video calling capabilities.
+*   **Cross-Platform Compatibility:** Designed to work gracefully across modern desktop and mobile browsers.
 
-### Frontend (React/Vite)
-To run the frontend locally:
+## Technology Stack
+
+*   **Frontend:** React, TypeScript, Vite, Tailwind CSS
+*   **Backend / Signaling:** Node.js, Express, WebSockets (ws)
+*   **Networking:** WebRTC (RTCPeerConnection, RTCDataChannel)
+
+## Getting Started
+
+### Prerequisites
+
+*   Node.js (v18 or higher recommended)
+*   npm or yarn
+
+### Installation
+
+1.  Clone the repository and navigate to the project directory:
+    ```bash
+    git clone <repository-url>
+    cd QuickShare
+    ```
+
+2.  Install dependencies:
+    ```bash
+    npm install
+    ```
+
+3.  Start the development server (which concurrently runs the Vite frontend and Express signaling server):
+    ```bash
+    npm run dev
+    ```
+
+4.  Open your browser and navigate to `http://localhost:3000`.
+
+### Building for Production
+
+To create a production-ready build of both the frontend client and the backend signaling server:
+
 ```bash
-npm install
-npm run dev
+npm run build
 ```
 
-### Backend (Signaling Server)
-The signaling server establishes the initial peer connection before stepping out of the way. It is built in Node.js using WebSockets.
+To start the production server:
+
 ```bash
-node signaling-server.js
+npm run start
 ```
 
-## Privacy & Security
-All files travel *directly* from device A to device B. There is no cloud storage, no file limits, and absolutely no tracking.
+## Security and Privacy
+
+Tata Dransfer does not store any files, messages, or communication data on central servers. The backend infrastructure is strictly utilized for initial signaling and establishing direct WebRTC connections between peers.
+
+## License
+
+This project is proprietary and confidential. Unauthorized copying of this file, via any medium, is strictly prohibited unless explicit permission is granted.
