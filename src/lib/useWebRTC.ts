@@ -81,7 +81,6 @@ export function useWebRTC(userName: string = '') {
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const qualityMonitorHandleRef = useRef<NodeJS.Timeout | null>(null);
   const activeResolutionTierRef = useRef<'720p'|'480p'>('720p');
-  const recorderHandleRef = useRef<{ stop: () => Promise<Blob> } | null>(null);
   const callManagerRef = useRef<ReturnType<typeof useCallManager> | null>(null);
 
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -109,6 +108,8 @@ export function useWebRTC(userName: string = '') {
   const sendQueueRef = useRef<File[]>([]);
   const isSendingRef = useRef(false);
   const receiveBufferRef = useRef<{ [id: string]: { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata, stream?: any, writePromise?: Promise<any> } }>({});
+  // The file this peer has accepted and is currently receiving chunks for.
+  const activeReceiveIdRef = useRef<string | null>(null);
 
   const callManager = useCallManager(
     pcRef, wsRef, dcRef, userNameRef, setMessages, roleRef,
@@ -187,12 +188,17 @@ export function useWebRTC(userName: string = '') {
     };
 
     ws.onerror = (error) => {
+      // A socket that has already been replaced (React StrictMode remounts, or a
+      // reconnect) still fires onerror as it tears down. Ignore those so a dead
+      // socket cannot raise an error banner over a live connection.
+      if (wsRef.current !== ws) return;
       console.error('WebSocket error:', error);
       setErrorMsg('Signaling server connection error. If you are in a preview iframe, please open the app in a new tab.');
       setStatus('error');
     };
 
     ws.onclose = (event) => {
+      if (wsRef.current !== ws) return;
       console.log('WebSocket closed:', event.code, event.reason);
       setStatus(prev => prev !== 'error' ? 'disconnected' : prev);
     };
@@ -392,7 +398,7 @@ export function useWebRTC(userName: string = '') {
               timestamp: msg.timestamp
             }];
           });
-        } else if (msg.type.startsWith('call-')) {
+        } else if (typeof msg.type === 'string' && msg.type.startsWith('call-')) {
           console.log('Received call message:', msg);
           callManagerRef.current?.handleCallMessage(msg);
         }
@@ -431,11 +437,16 @@ export function useWebRTC(userName: string = '') {
   };
 
   const handleFileChunk = (data: ArrayBuffer) => {
-    // Find the current active file
-    const activeFileId = Object.keys(receiveBufferRef.current).find(
-      id => receiveBufferRef.current[id].receivedBytes < receiveBufferRef.current[id].meta.size
-    );
-    
+    // Route by the file this peer actually accepted. Scanning for "the first
+    // incomplete buffer" misdirects chunks into a previous, abandoned transfer
+    // (for example one interrupted by a reconnect) and corrupts the new file.
+    const activeFileId =
+      activeReceiveIdRef.current && receiveBufferRef.current[activeReceiveIdRef.current]
+        ? activeReceiveIdRef.current
+        : Object.keys(receiveBufferRef.current).find(
+            id => receiveBufferRef.current[id].receivedBytes < receiveBufferRef.current[id].meta.size
+          );
+
     if (activeFileId) {
       const fileBuffer = receiveBufferRef.current[activeFileId];
       if (fileBuffer.stream) {
@@ -486,6 +497,7 @@ export function useWebRTC(userName: string = '') {
       
       // Cleanup buffer but keep url for preview if needed
       delete receiveBufferRef.current[msg.fileId];
+      if (activeReceiveIdRef.current === msg.fileId) activeReceiveIdRef.current = null;
       
       // Check if all files complete
       if (Object.keys(receiveBufferRef.current).length === 0) {
@@ -513,6 +525,7 @@ export function useWebRTC(userName: string = '') {
       }
     }
 
+    activeReceiveIdRef.current = fileId;
     setFilesProgress(prev => ({
       ...prev,
       [fileId]: { ...prev[fileId], status: 'transferring' }
@@ -526,6 +539,7 @@ export function useWebRTC(userName: string = '') {
       [fileId]: { ...prev[fileId], status: 'declined' }
     }));
     delete receiveBufferRef.current[fileId];
+    if (activeReceiveIdRef.current === fileId) activeReceiveIdRef.current = null;
     dcRef.current?.send(JSON.stringify({ type: 'file-decline', fileId }));
   };
 
@@ -672,25 +686,36 @@ export function useWebRTC(userName: string = '') {
 
   const sendChatMessage = useCallback((text: string) => {
     const msg: ChatMessage = { id: uuidv4(), senderRole: roleRef.current || 'system', text, timestamp: Date.now() };
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
-    }
+    // Prefer the peer-to-peer data channel: it is DTLS-encrypted end to end and
+    // never reaches the signaling server. Only fall back to the signaling socket
+    // when the peer connection is not usable, so messages are not simply lost.
     if (dcRef.current?.readyState === 'open') {
-      try { dcRef.current.send(JSON.stringify({ type: 'chat', ...msg })); } catch (e) { console.error('DC send error', e); }
+      try {
+        dcRef.current.send(JSON.stringify({ type: 'chat', ...msg }));
+      } catch (e) {
+        console.error('DC send error', e);
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
+        }
+      }
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
     }
     setMessages(prev => [...prev, msg]);
   }, []);
 
   const sendTyping = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
-    }
     if (dcRef.current?.readyState === 'open') {
       try { dcRef.current.send(JSON.stringify({ type: 'typing' })); } catch (e) { console.error('DC send error', e); }
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    // Tear the call down first, otherwise the camera and microphone stay live
+    // after the user backs out of a room.
+    callManagerRef.current?.cleanupCall();
     if (wsRef.current) wsRef.current.close();
     if (dcRef.current) dcRef.current.close();
     if (pcRef.current) pcRef.current.close();
