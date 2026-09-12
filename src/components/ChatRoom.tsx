@@ -250,7 +250,9 @@ export function ChatRoom({ hook, onBack }: { hook: ReturnType<typeof useWebRTC>,
           <div className="peer-name">{hook.peerName || 'Unknown user'}</div>
           <div className="peer-status">
             {status === 'disconnected' ? (
-              <span style={{ color: '#E11D48' }}>Disconnected &middot; Code: {hook.roomId}</span>
+              <span style={{ color: 'var(--bad)' }}>Disconnected &middot; Code: {hook.roomId}</span>
+            ) : status === 'reconnecting' ? (
+              <span className="status-reconnecting"><span className="pulse-dot warn"></span>Reconnecting&hellip;</span>
             ) : (
               <><span className="pulse-dot"></span>Connected &middot; {connectionType === 'local' ? 'Local WiFi' : 'Relayed'}</>
             )}

@@ -1599,3 +1599,7 @@ h2.title {
 }
 
 .back-btn svg { width: 17px; height: 17px; }
+
+/* Connection is wobbling but not gone — warn without alarming. */
+.pulse-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(245,165,36,0.16); }
+.status-reconnecting { display: inline-flex; align-items: center; gap: 6px; color: var(--warn); }

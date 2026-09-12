@@ -10,8 +10,12 @@ const wss = new WebSocketServer({ port: PORT });
 // roomId -> { peers: Set<ws>, lastActivity: number }
 const rooms = new Map();
 
-// Rooms auto-expire after 10 minutes of inactivity
-const ROOM_TTL_MS = 10 * 60 * 1000;
+// Chat and call signalling travel over the peer-to-peer data channel, so a
+// healthy room can sit silent on the socket for a long time. Keep the window
+// generous and refresh it on pong so live peers hold their room open.
+const ROOM_TTL_MS = 30 * 60 * 1000;
+const HEARTBEAT_MS = 25000;
+const MAX_MISSED_PONGS = 2;
 
 // Cleanup inactive rooms every 60 seconds
 setInterval(() => {
@@ -28,8 +32,15 @@ setInterval(() => {
 wss.on('connection', (ws) => {
   ws.roomId = null;
   ws.role = null;
-  ws.isAlive = true;
-  ws.on('pong', () => { ws.isAlive = true; });
+  // Browsers answer pings automatically, but a backgrounded tab is frozen and
+  // cannot. Count misses rather than dropping on the first one, and treat a
+  // pong as room activity so a quiet room is not reaped while peers are live.
+  ws.missedPongs = 0;
+  ws.on('pong', () => {
+    ws.missedPongs = 0;
+    const room = ws.roomId && rooms.get(ws.roomId);
+    if (room) room.lastActivity = Date.now();
+  });
 
   ws.on('message', (raw) => {
     let msg;
@@ -146,11 +157,11 @@ function handleDisconnect(ws) {
 // Keep connections alive through Render's proxy (prevents silent drops)
 const heartbeat = setInterval(() => {
   wss.clients.forEach((ws) => {
-    if (ws.isAlive === false) return ws.terminate();
-    ws.isAlive = false;
-    ws.ping();
+    if ((ws.missedPongs ?? 0) >= MAX_MISSED_PONGS) return ws.terminate();
+    ws.missedPongs = (ws.missedPongs ?? 0) + 1;
+    try { ws.ping(); } catch { /* socket already gone */ }
   });
-}, 25000); // 25s interval - well within Render's 30s timeout
+}, HEARTBEAT_MS); // ping every 25s, drop after two misses (~50s of silence)
 
 wss.on('close', () => clearInterval(heartbeat));
 
