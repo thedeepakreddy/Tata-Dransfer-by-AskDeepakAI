@@ -11,7 +11,6 @@ interface ReceiverProps {
 }
 
 export function Receiver({ onBack, userName }: ReceiverProps) {
-  const [cameraMode, setCameraMode] = useState<'environment'|'user'>('environment');
   const scannerRef = useRef<any>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [manualCode, setManualCode] = useState('');
@@ -108,13 +107,20 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
       <p className="desc" style={{ marginLeft: '40px' }}>Open Tata Dransfer on your phone and tap Scan — connects in about a second.</p>
 
       {errorMsg && (
-        <div style={{ padding: '16px', background: '#FEF2F2', color: '#991B1B', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
-          {errorMsg}
+        <div className="alert err" role="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v6" /><path d="M12 16.5v.01" />
+          </svg>
+          <span>{errorMsg}</span>
         </div>
       )}
       {scanError && !isConnected && !errorMsg && (
-        <div style={{ padding: '16px', background: '#FFF7ED', color: '#C2410C', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
-          {scanError}
+        <div className="alert warn" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+            <path d="M12 9v4" /><path d="M12 17v.01" />
+          </svg>
+          <span>{scanError}</span>
         </div>
       )}
 
@@ -144,28 +150,17 @@ export function Receiver({ onBack, userName }: ReceiverProps) {
           <div style={{ width: '100%', textAlign: 'center' }}>
             <p className="panel-label" style={{ marginBottom: '16px' }}>Or enter the 6-character code manually:</p>
             <form onSubmit={handleManualJoin} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-              <input 
-                type="text" 
-                maxLength={6} 
-                placeholder="A3F9K2" 
+              <input
+                className="code-input"
+                type="text"
+                maxLength={6}
+                placeholder="A3F9K2"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
                 aria-label="Manual pairing code"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                style={{ 
-                  background: 'var(--paper)', 
-                  padding: '14px 24px', 
-                  borderRadius: '16px', 
-                  border: '1px solid var(--hairline)',
-                  fontSize: '28px',
-                  letterSpacing: '8px',
-                  color: 'var(--ink)',
-                  fontFamily: 'monospace',
-                  textAlign: 'center',
-                  width: '100%',
-                  maxWidth: '280px',
-                  textTransform: 'uppercase',
-                  outline: 'none'
-                }}
               />
               <button type="submit" className="primary-btn" disabled={manualCode.length < 6 || status === 'connecting'} style={{ width: '100%', maxWidth: '280px' }}>
                 {status === 'connecting' ? 'Joining...' : 'Connect'}
