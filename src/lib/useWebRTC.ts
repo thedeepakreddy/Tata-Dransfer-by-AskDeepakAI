@@ -25,7 +25,7 @@ export interface FileProgress {
   name: string;
   size: number;
   bytesTransferred: number;
-  status: 'pending' | 'transferring' | 'complete' | 'error';
+  status: 'pending' | 'waiting_for_accept' | 'declined' | 'transferring' | 'complete' | 'error';
   blobUrl?: string;
 }
 
@@ -81,7 +81,6 @@ export function useWebRTC(userName: string = '') {
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const qualityMonitorHandleRef = useRef<NodeJS.Timeout | null>(null);
   const activeResolutionTierRef = useRef<'720p'|'480p'>('720p');
-  const recorderHandleRef = useRef<{ stop: () => Promise<Blob> } | null>(null);
   const callManagerRef = useRef<ReturnType<typeof useCallManager> | null>(null);
 
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
@@ -108,7 +107,9 @@ export function useWebRTC(userName: string = '') {
   // File transfer state
   const sendQueueRef = useRef<File[]>([]);
   const isSendingRef = useRef(false);
-  const receiveBufferRef = useRef<Record<string, { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata }>>({});
+  const receiveBufferRef = useRef<{ [id: string]: { chunks: ArrayBuffer[], receivedBytes: number, meta: FileMetadata, stream?: any, writePromise?: Promise<any> } }>({});
+  // The file this peer has accepted and is currently receiving chunks for.
+  const activeReceiveIdRef = useRef<string | null>(null);
 
   const callManager = useCallManager(
     pcRef, wsRef, dcRef, userNameRef, setMessages, roleRef,
@@ -187,12 +188,17 @@ export function useWebRTC(userName: string = '') {
     };
 
     ws.onerror = (error) => {
+      // A socket that has already been replaced (React StrictMode remounts, or a
+      // reconnect) still fires onerror as it tears down. Ignore those so a dead
+      // socket cannot raise an error banner over a live connection.
+      if (wsRef.current !== ws) return;
       console.error('WebSocket error:', error);
       setErrorMsg('Signaling server connection error. If you are in a preview iframe, please open the app in a new tab.');
       setStatus('error');
     };
 
     ws.onclose = (event) => {
+      if (wsRef.current !== ws) return;
       console.log('WebSocket closed:', event.code, event.reason);
       setStatus(prev => prev !== 'error' ? 'disconnected' : prev);
     };
@@ -372,6 +378,10 @@ export function useWebRTC(userName: string = '') {
           setPeerName(msg.userName);
         } else if (msg.type === 'meta') {
           handleFileMetadata(msg);
+        } else if (msg.type === 'file-accept') {
+          streamFile(msg.fileId);
+        } else if (msg.type === 'file-decline') {
+          handleFileDecline(msg.fileId);
         } else if (msg.type === 'eof') {
           handleFileEof(msg);
         } else if (msg.type === 'typing') {
@@ -388,7 +398,7 @@ export function useWebRTC(userName: string = '') {
               timestamp: msg.timestamp
             }];
           });
-        } else if (msg.type.startsWith('call-')) {
+        } else if (typeof msg.type === 'string' && msg.type.startsWith('call-')) {
           console.log('Received call message:', msg);
           callManagerRef.current?.handleCallMessage(msg);
         }
@@ -405,7 +415,8 @@ export function useWebRTC(userName: string = '') {
     receiveBufferRef.current[meta.fileId] = {
       chunks: [],
       receivedBytes: 0,
-      meta
+      meta,
+      writePromise: Promise.resolve()
     };
     setFilesProgress(prev => ({
       ...prev,
@@ -414,7 +425,7 @@ export function useWebRTC(userName: string = '') {
         name: meta.name,
         size: meta.size,
         bytesTransferred: 0,
-        status: 'transferring'
+        status: 'waiting_for_accept'
       }
     }));
     setMessages(prev => [...prev, {
@@ -426,14 +437,23 @@ export function useWebRTC(userName: string = '') {
   };
 
   const handleFileChunk = (data: ArrayBuffer) => {
-    // Find the current active file
-    const activeFileId = Object.keys(receiveBufferRef.current).find(
-      id => receiveBufferRef.current[id].receivedBytes < receiveBufferRef.current[id].meta.size
-    );
-    
+    // Route by the file this peer actually accepted. Scanning for "the first
+    // incomplete buffer" misdirects chunks into a previous, abandoned transfer
+    // (for example one interrupted by a reconnect) and corrupts the new file.
+    const activeFileId =
+      activeReceiveIdRef.current && receiveBufferRef.current[activeReceiveIdRef.current]
+        ? activeReceiveIdRef.current
+        : Object.keys(receiveBufferRef.current).find(
+            id => receiveBufferRef.current[id].receivedBytes < receiveBufferRef.current[id].meta.size
+          );
+
     if (activeFileId) {
       const fileBuffer = receiveBufferRef.current[activeFileId];
-      fileBuffer.chunks.push(data);
+      if (fileBuffer.stream) {
+        fileBuffer.writePromise = fileBuffer.writePromise!.then(() => fileBuffer.stream.write(data));
+      } else {
+        fileBuffer.chunks.push(data);
+      }
       fileBuffer.receivedBytes += data.byteLength;
       
       setFilesProgress(prev => ({
@@ -446,11 +466,17 @@ export function useWebRTC(userName: string = '') {
     }
   };
 
-  const handleFileEof = (msg: { type: 'eof', fileId: string }) => {
+  const handleFileEof = async (msg: { type: 'eof', fileId: string }) => {
     const fileBuffer = receiveBufferRef.current[msg.fileId];
     if (fileBuffer) {
-      const blob = new Blob(fileBuffer.chunks, { type: fileBuffer.meta.mimeType });
-      const url = URL.createObjectURL(blob);
+      let url = '';
+      if (fileBuffer.stream) {
+        await fileBuffer.writePromise;
+        await fileBuffer.stream.close();
+      } else {
+        const blob = new Blob(fileBuffer.chunks, { type: fileBuffer.meta.mimeType });
+        url = URL.createObjectURL(blob);
+      }
       
       setFilesProgress(prev => ({
         ...prev,
@@ -461,19 +487,70 @@ export function useWebRTC(userName: string = '') {
         }
       }));
 
-      // Auto download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileBuffer.meta.name;
-      a.click();
+      // Auto download if it was memory buffered
+      if (!fileBuffer.stream && url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileBuffer.meta.name;
+        a.click();
+      }
       
       // Cleanup buffer but keep url for preview if needed
       delete receiveBufferRef.current[msg.fileId];
+      if (activeReceiveIdRef.current === msg.fileId) activeReceiveIdRef.current = null;
       
       // Check if all files complete
       if (Object.keys(receiveBufferRef.current).length === 0) {
          setStatus('complete');
       }
+    }
+  };
+
+  const acceptFileOffer = async (fileId: string) => {
+    const fileBuffer = receiveBufferRef.current[fileId];
+    if (!fileBuffer) return;
+
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: fileBuffer.meta.name,
+        });
+        fileBuffer.stream = await handle.createWritable();
+      } catch (e) {
+        console.error('File picker cancelled or failed', e);
+        if (e instanceof DOMException && e.name === 'AbortError') {
+          declineFileOffer(fileId);
+          return;
+        }
+      }
+    }
+
+    activeReceiveIdRef.current = fileId;
+    setFilesProgress(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], status: 'transferring' }
+    }));
+    dcRef.current?.send(JSON.stringify({ type: 'file-accept', fileId }));
+  };
+
+  const declineFileOffer = (fileId: string) => {
+    setFilesProgress(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], status: 'declined' }
+    }));
+    delete receiveBufferRef.current[fileId];
+    if (activeReceiveIdRef.current === fileId) activeReceiveIdRef.current = null;
+    dcRef.current?.send(JSON.stringify({ type: 'file-decline', fileId }));
+  };
+
+  const handleFileDecline = (fileId: string) => {
+    setFilesProgress(prev => ({
+      ...prev,
+      [fileId]: { ...prev[fileId], status: 'declined' }
+    }));
+    if (sendQueueRef.current.length > 0 && (sendQueueRef.current[0] as any)._fileId === fileId) {
+      sendQueueRef.current.shift();
+      processSendQueue();
     }
   };
 
@@ -515,12 +592,12 @@ export function useWebRTC(userName: string = '') {
 
     isSendingRef.current = true;
     setStatus('transferring');
-    const file = sendQueueRef.current.shift()!;
+    const file = sendQueueRef.current[0];
     const fileId = (file as any)._fileId;
     
     const dc = dcRef.current!;
     
-    // Send meta
+    // Send meta (offer)
     const meta: FileMetadata = {
       type: 'meta',
       fileId,
@@ -532,10 +609,23 @@ export function useWebRTC(userName: string = '') {
     
     setFilesProgress(prev => ({
       ...prev,
+      [fileId]: { ...prev[fileId], status: 'waiting_for_accept' }
+    }));
+  };
+
+  const streamFile = async (fileId: string) => {
+    if (sendQueueRef.current.length === 0) return;
+    const file = sendQueueRef.current[0];
+    if ((file as any)._fileId !== fileId) return;
+
+    sendQueueRef.current.shift();
+
+    setFilesProgress(prev => ({
+      ...prev,
       [fileId]: { ...prev[fileId], status: 'transferring' }
     }));
 
-    // Read and send chunks
+    const dc = dcRef.current!;
     const reader = file.stream().getReader();
     let bytesSent = 0;
 
@@ -582,7 +672,9 @@ export function useWebRTC(userName: string = '') {
     }
 
     // Send EOF
-    dc.send(JSON.stringify({ type: 'eof', fileId }));
+    if (dc.readyState === 'open') {
+      dc.send(JSON.stringify({ type: 'eof', fileId }));
+    }
     setFilesProgress(prev => ({
       ...prev,
       [fileId]: { ...prev[fileId], status: 'complete' }
@@ -594,25 +686,36 @@ export function useWebRTC(userName: string = '') {
 
   const sendChatMessage = useCallback((text: string) => {
     const msg: ChatMessage = { id: uuidv4(), senderRole: roleRef.current || 'system', text, timestamp: Date.now() };
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
-    }
+    // Prefer the peer-to-peer data channel: it is DTLS-encrypted end to end and
+    // never reaches the signaling server. Only fall back to the signaling socket
+    // when the peer connection is not usable, so messages are not simply lost.
     if (dcRef.current?.readyState === 'open') {
-      try { dcRef.current.send(JSON.stringify({ type: 'chat', ...msg })); } catch (e) { console.error('DC send error', e); }
+      try {
+        dcRef.current.send(JSON.stringify({ type: 'chat', ...msg }));
+      } catch (e) {
+        console.error('DC send error', e);
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
+        }
+      }
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'chat', roomId: roomIdRef.current, payload: msg }));
     }
     setMessages(prev => [...prev, msg]);
   }, []);
 
   const sendTyping = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
-    }
     if (dcRef.current?.readyState === 'open') {
       try { dcRef.current.send(JSON.stringify({ type: 'typing' })); } catch (e) { console.error('DC send error', e); }
+    } else if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'typing', roomId: roomIdRef.current }));
     }
   }, []);
 
   const disconnect = useCallback(() => {
+    // Tear the call down first, otherwise the camera and microphone stay live
+    // after the user backs out of a room.
+    callManagerRef.current?.cleanupCall();
     if (wsRef.current) wsRef.current.close();
     if (dcRef.current) dcRef.current.close();
     if (pcRef.current) pcRef.current.close();
@@ -636,6 +739,8 @@ export function useWebRTC(userName: string = '') {
     isPeerTyping,
     initSignaling,
     sendFiles,
+    acceptFileOffer,
+    declineFileOffer,
     sendChatMessage,
     sendTyping,
     disconnect,

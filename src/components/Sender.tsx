@@ -30,7 +30,7 @@ export function Sender({ onBack, userName }: SenderProps) {
       QRCode.toDataURL(deepLinkUrl, { 
         width: 300,
         margin: 2,
-        color: { dark: '#14181C', light: '#FFFFFF' }
+        color: { dark: '#08090D', light: '#FFFFFF' }
       })
       .then(url => setQrCodeUrl(url))
       .catch(console.error);
@@ -45,7 +45,6 @@ export function Sender({ onBack, userName }: SenderProps) {
   };
 
   const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected' || status === 'negotiating';
-  const hasFiles = Object.keys(filesProgress).length > 0;
 
   if (isConnected) {
     return <ChatRoom hook={hook} onBack={onBack} />;
@@ -62,8 +61,11 @@ export function Sender({ onBack, userName }: SenderProps) {
       <p className="desc" style={{ marginLeft: '40px' }}>choose photos, videos, pdf, music, any file.</p>
 
       {errorMsg && (
-        <div style={{ padding: '16px', background: '#FEF2F2', color: '#991B1B', borderRadius: '16px', marginBottom: '24px', fontSize: '14px' }}>
-          {errorMsg}
+        <div className="alert err" role="alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v6" /><path d="M12 16.5v.01" />
+          </svg>
+          <span>{errorMsg}</span>
         </div>
       )}
 
@@ -104,8 +106,8 @@ export function Sender({ onBack, userName }: SenderProps) {
           {!isConnected && (
             <div style={{ textAlign: 'center', marginBottom: '24px' }}>
               <p className="panel-label" style={{ marginBottom: '12px' }}>Enter this pin manually or scan the QR code:</p>
-              <div style={{ background: 'var(--paper)', padding: '14px 32px', borderRadius: '16px', display: 'inline-block', border: '1px solid var(--hairline)', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-                <strong style={{ fontSize: '36px', letterSpacing: '8px', color: 'var(--ink)', fontFamily: 'monospace' }}>{roomId}</strong>
+              <div className="pin-box">
+                <strong>{roomId}</strong>
               </div>
             </div>
           )}

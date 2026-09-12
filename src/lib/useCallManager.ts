@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { CallMode, CallState, CallQuality, ChatMessage, Role } from './useWebRTC';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -48,22 +48,36 @@ export function useCallManager(
   const isCallerRef = useRef(false);
   const callStartTimeRef = useRef<number>(0);
 
+  // Mirrors callState synchronously. React state lands a render later, which is
+  // too late to reject a second copy of a signal that arrives in the same tick.
+  const callStateRef = useRef<CallState>('idle');
+  useEffect(() => { callStateRef.current = callState; }, [callState]);
+  const enterCallState = useCallback((next: CallState) => {
+    callStateRef.current = next;
+    setCallState(next);
+  }, [setCallState]);
+
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
 
   const sendCallSignal = useCallback((type: string, payload: any = {}) => {
-    let sent = false;
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      console.log('Sending call signal via WS fallback:', type, payload);
-      wsRef.current.send(JSON.stringify({ type: 'call-signal', payload: { type, ...payload } }));
-      sent = true;
-    }
+    // Send over exactly one transport. Emitting on both the data channel and the
+    // signaling socket delivers every signal twice, and the peer has no way to
+    // tell the copies apart: a duplicated 'call-accept' opens a second camera
+    // stream and renegotiates the connection on top of its own offer.
     if (dcRef.current?.readyState === 'open') {
-      console.log('Sending call signal via DC:', type, payload);
-      try { dcRef.current.send(JSON.stringify({ type, ...payload })); sent = true; } catch (e) { console.error('DC send err', e); }
+      try {
+        dcRef.current.send(JSON.stringify({ type, ...payload }));
+        return true;
+      } catch (e) {
+        console.error('DC send error, falling back to signaling socket', e);
+      }
     }
-    if (!sent) {
-      console.log('Cannot send call signal, no connection available');
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'call-signal', payload: { type, ...payload } }));
+      return true;
     }
+    console.warn('Cannot send call signal, no transport available:', type);
+    return false;
   }, [dcRef, wsRef]);
 
   const startLocalMedia = useCallback(async (mode: CallMode) => {
@@ -214,6 +228,20 @@ export function useCallManager(
   const callModeRef = useRef<CallMode>(null);
   useEffect(() => { callModeRef.current = callMode; }, [callMode]);
 
+  // Abandon a call that cannot start (most often a denied camera/mic prompt) and
+  // say so in the thread, rather than leaving the caller ringing forever.
+  const failCall = useCallback((text: string) => {
+    cleanupCall();
+    setMessages(prev => [...prev, {
+      id: uuidv4(),
+      senderRole: 'system',
+      text,
+      isSystemMessage: true,
+      timestamp: Date.now(),
+    }]);
+    enterCallState('idle');
+  }, [cleanupCall, setMessages, enterCallState]);
+
   const logCall = useCallback((reason: 'ended' | 'missed' | 'rejected') => {
     let text = '';
     const modeStr = callModeRef.current === 'video' ? 'Video call' : 'Voice call';
@@ -246,90 +274,113 @@ export function useCallManager(
   const handleCallMessage = useCallback((msg: any) => {
     switch (msg.type) {
       case 'call-request':
+        // Already busy: ignore rather than stacking a second incoming call.
+        if (callStateRef.current !== 'idle') return;
         setCallMode(msg.mode);
         isCallerRef.current = false;
-        setCallState('incoming');
+        enterCallState('incoming');
         break;
 
-      case 'call-accept':
-        startLocalMedia(callModeRef.current).then(async (stream) => {
-          attachMediaToConnection(stream);
-          if (pcRef.current && wsRef.current) {
+      case 'call-accept': {
+        // Only the caller acts on an accept, and only while still ringing.
+        if (!isCallerRef.current || callStateRef.current !== 'ringing') return;
+        enterCallState('connecting');
+        startLocalMedia(callModeRef.current)
+          .then(async (stream) => {
+            attachMediaToConnection(stream);
+            if (!pcRef.current) return;
             const offer = await pcRef.current.createOffer();
             await pcRef.current.setLocalDescription(offer);
-            
-            // Re-negotiate via websocket just like normal setup
-            // QuickShare signaling server handles this because when we send 'offer', the server relays it.
-            // Wait, we need to pass the roomId! The existing handleOffer expects a roomId, but useCallManager doesn't have it.
-            // Let's pass roomId to useCallManager or just send it if it's stored in ws state?
-            // Actually, we can send it via DataChannel instead!
             sendCallSignal('call-offer', { sdp: offer });
-          }
-          setCallState('connecting');
-        });
+          })
+          .catch((err) => {
+            console.error('Could not start local media for call', err);
+            sendCallSignal('call-end');
+            failCall('Call failed — camera or microphone unavailable.');
+          });
         break;
-        
+      }
+
       case 'call-offer':
-        // Handling renegotiation over data channel
-        if (pcRef.current) {
-          pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp)).then(async () => {
+        if (!pcRef.current) return;
+        pcRef.current
+          .setRemoteDescription(new RTCSessionDescription(msg.sdp))
+          .then(async () => {
             const answer = await pcRef.current!.createAnswer();
             await pcRef.current!.setLocalDescription(answer);
             sendCallSignal('call-answer', { sdp: answer });
-          });
-        }
+          })
+          .catch((err) => console.error('Call renegotiation failed', err));
         break;
-        
+
       case 'call-answer':
-        if (pcRef.current) {
-          pcRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        }
+        // Only meaningful while our own offer is outstanding.
+        if (!pcRef.current || pcRef.current.signalingState !== 'have-local-offer') return;
+        pcRef.current
+          .setRemoteDescription(new RTCSessionDescription(msg.sdp))
+          .catch((err) => console.error('Could not apply call answer', err));
         break;
 
       case 'call-reject':
+        if (callStateRef.current === 'idle') return;
         logCall('rejected');
-        setCallState('rejected');
+        enterCallState('rejected');
         cleanupCall();
-        setTimeout(() => setCallState('idle'), 2000);
+        setTimeout(() => enterCallState('idle'), 2000);
         break;
 
       case 'call-end':
+        if (callStateRef.current === 'idle') return;
         logCall('ended');
-        setCallState('ended');
+        enterCallState('ended');
         cleanupCall();
-        setTimeout(() => setCallState('idle'), 2000);
+        setTimeout(() => enterCallState('idle'), 2000);
         break;
     }
-  }, [startLocalMedia, attachMediaToConnection, cleanupCall, pcRef, wsRef, setCallMode, setCallState, sendCallSignal]);
+  }, [startLocalMedia, attachMediaToConnection, cleanupCall, failCall, logCall, pcRef, setCallMode, enterCallState, sendCallSignal]);
 
   const startCall = useCallback((mode: CallMode) => {
+    if (callStateRef.current !== 'idle') return;
     setCallMode(mode);
     isCallerRef.current = true;
-    sendCallSignal('call-request', { mode });
-    setCallState('ringing');
-  }, [sendCallSignal, setCallMode, setCallState]);
+    if (!sendCallSignal('call-request', { mode })) {
+      failCall('Could not start the call — no connection to the other device.');
+      return;
+    }
+    enterCallState('ringing');
+  }, [sendCallSignal, setCallMode, enterCallState, failCall]);
 
   const acceptCall = useCallback(async () => {
-    const stream = await startLocalMedia(callModeRef.current);
-    attachMediaToConnection(stream);
-    sendCallSignal('call-accept');
-    setCallState('connecting');
-  }, [startLocalMedia, attachMediaToConnection, sendCallSignal, setCallState]);
+    if (callStateRef.current !== 'incoming') return;
+    enterCallState('connecting');
+    try {
+      const stream = await startLocalMedia(callModeRef.current);
+      attachMediaToConnection(stream);
+      sendCallSignal('call-accept');
+    } catch (err) {
+      // Most often the user denied the camera/microphone prompt.
+      console.error('Could not start local media for call', err);
+      sendCallSignal('call-reject');
+      failCall('Call declined — camera or microphone unavailable.');
+    }
+  }, [startLocalMedia, attachMediaToConnection, sendCallSignal, enterCallState, failCall]);
 
   const rejectCall = useCallback(() => {
+    if (callStateRef.current === 'idle') return;
     logCall('rejected');
     sendCallSignal('call-reject');
     setCallMode(null);
-    setCallState('idle');
-  }, [sendCallSignal, setCallMode, setCallState, logCall]);
+    enterCallState('idle');
+  }, [sendCallSignal, setCallMode, enterCallState, logCall]);
 
   const endCall = useCallback(() => {
+    if (callStateRef.current === 'idle') return;
     logCall('ended');
     sendCallSignal('call-end');
     cleanupCall();
-    setCallState('ended');
-    setTimeout(() => setCallState('idle'), 2000);
-  }, [sendCallSignal, cleanupCall, setCallState, logCall]);
+    enterCallState('ended');
+    setTimeout(() => enterCallState('idle'), 2000);
+  }, [sendCallSignal, cleanupCall, enterCallState, logCall]);
 
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current) return false;
@@ -399,10 +450,10 @@ export function useCallManager(
         if (callStartTimeRef.current === 0) {
           callStartTimeRef.current = Date.now();
         }
-        setCallState('active');
+        enterCallState('active');
         startQualityMonitor();
     };
-  }, [pcRef, setRemoteStream, setCallState, startQualityMonitor]);
+  }, [pcRef, setRemoteStream, enterCallState, startQualityMonitor]);
 
   const startRecording = useCallback(({ localVideoEl, remoteVideoEl }: { localVideoEl: HTMLVideoElement | null, remoteVideoEl: HTMLVideoElement | null }) => {
     const canvas = document.createElement('canvas');
@@ -482,6 +533,7 @@ export function useCallManager(
   return {
     handleCallMessage,
     attachTrackHandler,
+    cleanupCall,
     startCall,
     acceptCall,
     rejectCall,

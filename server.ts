@@ -7,7 +7,7 @@ import http from "http";
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true });
