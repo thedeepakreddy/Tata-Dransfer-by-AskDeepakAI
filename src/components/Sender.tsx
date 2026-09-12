@@ -18,9 +18,28 @@ export function Sender({ onBack, userName }: SenderProps) {
   const hook = useWebRTC(userName);
   const { initSignaling, roomId, status, sendFiles, filesProgress, errorMsg, connectionType, disconnect } = hook;
 
+  // Resolve the room exactly once per mount of this screen. If the page was
+  // reloaded or discarded mid-session, rejoin the same room so the code the
+  // other device already scanned keeps working.
+  //
+  // This has to be a ref rather than a read inside the effect: StrictMode runs
+  // the effect twice with the teardown in between, and that teardown clears the
+  // stored session, so the second pass would never see the room being resumed.
+  const sessionRoomRef = useRef<string | null>(null);
+  if (sessionRoomRef.current === null) {
+    let resumed: string | null = null;
+    try {
+      const saved = sessionStorage.getItem('td:session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.role === 'sender' && typeof parsed.room === 'string') resumed = parsed.room;
+      }
+    } catch { /* private mode */ }
+    sessionRoomRef.current = resumed ?? uuidv4().substring(0, 6).toUpperCase();
+  }
+
   useEffect(() => {
-    const newRoomId = uuidv4().substring(0, 6).toUpperCase();
-    initSignaling(newRoomId, 'sender');
+    initSignaling(sessionRoomRef.current!, 'sender');
     return () => disconnect();
   }, [initSignaling, disconnect]);
 
@@ -44,7 +63,7 @@ export function Sender({ onBack, userName }: SenderProps) {
     }
   };
 
-  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'disconnected' || status === 'negotiating';
+  const isConnected = status === 'connected' || status === 'transferring' || status === 'complete' || status === 'reconnecting' || status === 'disconnected';
 
   if (isConnected) {
     return <ChatRoom hook={hook} onBack={onBack} />;
@@ -53,7 +72,7 @@ export function Sender({ onBack, userName }: SenderProps) {
   return (
     <section className="screen active" id="send">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-        <button className="header-back" onClick={onBack}>
+        <button className="header-back" aria-label="Back to home" onClick={onBack}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <h2 className="title" style={{ margin: 0, marginLeft: '8px' }}>Choose what to send</h2>

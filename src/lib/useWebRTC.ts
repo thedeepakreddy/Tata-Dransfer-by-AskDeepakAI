@@ -3,7 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCallManager } from './useCallManager';
 
 export type Role = 'sender' | 'receiver' | null;
-export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'disconnected';
+export type ConnectionState = 'idle' | 'connecting' | 'connected' | 'transferring' | 'complete' | 'error' | 'reconnecting' | 'disconnected';
+// The signalling socket is a separate transport from the peer connection.
+// It is only needed to introduce the two devices; once the data channel is
+// open, losing it does not end the session.
+export type SignalingState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 export type ConnectionType = 'local' | 'relayed' | 'unknown';
 export type CallState = 'idle' | 'ringing' | 'incoming' | 'connecting' | 'active' | 'rejected' | 'ended';
 export type CallMode = 'audio' | 'video' | null;
@@ -60,6 +64,7 @@ export function useWebRTC(userName: string = '') {
   const [role, setRole] = useState<Role>(null);
   const [roomId, setRoomId] = useState<string>('');
   const [status, setStatus] = useState<ConnectionState>('idle');
+  const [signalingState, setSignalingState] = useState<SignalingState>('idle');
   const [connectionType, setConnectionType] = useState<ConnectionType>('unknown');
   const [filesProgress, setFilesProgress] = useState<Record<string, FileProgress>>({});
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,6 +97,15 @@ export function useWebRTC(userName: string = '') {
   const iceCandidateQueueRef = useRef<RTCIceCandidateInit[]>([]);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
+  // Signalling socket lifecycle
+  const shouldReconnectRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitiatorRef = useRef(false);
+  // Peer connection recovery
+  const peerGraceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastIceRestartRef = useRef(0);
+
   // Refs for state accessed inside callbacks
   const roomIdRef = useRef<string>('');
   const roleRef = useRef<Role>(null);
@@ -129,22 +143,53 @@ export function useWebRTC(userName: string = '') {
     return `wss://tata-dransfer-by-askdeepakai.onrender.com`;
   };
 
-  const initSignaling = useCallback((room: string, clientRole: Role) => {
-    setStatus('connecting');
-    setRole(clientRole);
-    setRoomId(room);
-    roomIdRef.current = room;
-    roleRef.current = clientRole;
-    statusRef.current = 'connecting';
-    
-    if (wsRef.current) {
-      wsRef.current.close();
+  const clearReconnectTimer = () => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
-    
+  };
+
+  // The session lives on the peer-to-peer channel, not the signalling socket.
+  // The socket only introduces the two devices; once the data channel is open,
+  // losing the socket is recoverable and must not end the session.
+  const isPeerLive = () => dcRef.current?.readyState === 'open';
+
+  function scheduleReconnect() {
+    if (!shouldReconnectRef.current || !roomIdRef.current) return;
+    if (reconnectTimerRef.current) return;
+    const attempt = reconnectAttemptsRef.current;
+    // 1s, 2s, 4s, 8s, then capped at 15s.
+    const delay = Math.min(1000 * 2 ** attempt, 15000);
+    reconnectAttemptsRef.current = attempt + 1;
+    setSignalingState('reconnecting');
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectSocket();
+    }, delay);
+  }
+
+  function connectSocket() {
+    const room = roomIdRef.current;
+    const clientRole = roleRef.current;
+    if (!room || !clientRole) return;
+
+    clearReconnectTimer();
+    setSignalingState(reconnectAttemptsRef.current > 0 ? 'reconnecting' : 'connecting');
+
+    if (wsRef.current) {
+      const stale = wsRef.current;
+      wsRef.current = null;
+      try { stale.close(); } catch { /* already closing */ }
+    }
+
     const ws = new WebSocket(getWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) return;
+      reconnectAttemptsRef.current = 0;
+      setSignalingState('open');
       ws.send(JSON.stringify({ type: 'join', roomId: room, role: clientRole }));
     };
 
@@ -152,6 +197,14 @@ export function useWebRTC(userName: string = '') {
       try {
         const msg = JSON.parse(event.data);
         if (msg.type === 'ready') {
+          // Re-joining after a socket reconnect also produces 'ready'. If the
+          // peer channel is already up this is not a fresh pairing, and starting
+          // a new handshake would destroy the working connection.
+          if (isPeerLive()) {
+            if (statusRef.current === 'reconnecting') setStatus('connected');
+            return;
+          }
+          isInitiatorRef.current = !!msg.isInitiator;
           setStatus('connected');
           if (msg.isInitiator) {
             await startWebRTC(true);
@@ -176,6 +229,9 @@ export function useWebRTC(userName: string = '') {
         } else if (msg.type === 'call-signal') {
           callManagerRef.current?.handleCallMessage({ type: 'call-signal', ...msg.payload });
         } else if (msg.type === 'peer-disconnected') {
+          // Only the other device's *socket* dropped. They may simply have
+          // backgrounded the app; the peer-to-peer link can be perfectly fine.
+          if (isPeerLive()) return;
           setStatus('disconnected');
           setErrorMsg('Peer disconnected');
         } else if (msg.type === 'error') {
@@ -193,16 +249,87 @@ export function useWebRTC(userName: string = '') {
       // socket cannot raise an error banner over a live connection.
       if (wsRef.current !== ws) return;
       console.error('WebSocket error:', error);
-      setErrorMsg('Signaling server connection error. If you are in a preview iframe, please open the app in a new tab.');
-      setStatus('error');
+      // Only surface this if we never got connected at all. Once the peer link
+      // exists, or a retry is already in flight, it is not the user's problem.
+      if (!isPeerLive() && reconnectAttemptsRef.current === 0 && statusRef.current === 'connecting') {
+        setErrorMsg('Signaling server connection error. If you are in a preview iframe, please open the app in a new tab.');
+        setStatus('error');
+      }
     };
 
     ws.onclose = (event) => {
       if (wsRef.current !== ws) return;
       console.log('WebSocket closed:', event.code, event.reason);
-      setStatus(prev => prev !== 'error' ? 'disconnected' : prev);
+      setSignalingState('closed');
+      // Backgrounding a tab routinely kills this socket. Keep the session alive
+      // while the peer channel is up, and try to bring the socket back.
+      if (!isPeerLive() && statusRef.current !== 'error' && statusRef.current !== 'idle') {
+        setStatus('reconnecting');
+      }
+      scheduleReconnect();
     };
+  }
+
+  const initSignaling = useCallback((room: string, clientRole: Role) => {
+    setStatus('connecting');
+    setRole(clientRole);
+    setRoomId(room);
+    roomIdRef.current = room;
+    roleRef.current = clientRole;
+    statusRef.current = 'connecting';
+    shouldReconnectRef.current = true;
+    reconnectAttemptsRef.current = 0;
+    // Remember the room so a discarded or reloaded page can rejoin it.
+    try {
+      sessionStorage.setItem('td:session', JSON.stringify({ room, role: clientRole }));
+    } catch { /* private mode */ }
+    connectSocket();
   }, []);
+
+  const clearPeerGraceTimer = () => {
+    if (peerGraceTimerRef.current) {
+      clearTimeout(peerGraceTimerRef.current);
+      peerGraceTimerRef.current = null;
+    }
+  };
+
+  // How long a wobbling peer connection is given to recover before the session
+  // is called dead. Backgrounded tabs routinely take several seconds.
+  const PEER_GRACE_MS = 20000;
+
+  function startPeerGraceTimer() {
+    if (peerGraceTimerRef.current) return;
+    peerGraceTimerRef.current = setTimeout(() => {
+      peerGraceTimerRef.current = null;
+      if (pcRef.current?.connectionState === 'connected' || isPeerLive()) return;
+      setStatus('disconnected');
+    }, PEER_GRACE_MS);
+  }
+
+  // 'failed' is recoverable: ICE can be restarted over the existing connection,
+  // which keeps the data channel and any in-flight transfer intact.
+  async function attemptIceRestart() {
+    const pc = pcRef.current;
+    if (!pc || pc.signalingState === 'closed') return;
+    // Only the side that made the original offer drives renegotiation.
+    if (!isInitiatorRef.current) return;
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    if (now - lastIceRestartRef.current < 8000) return;
+    lastIceRestartRef.current = now;
+    try {
+      if (typeof pc.restartIce === 'function') pc.restartIce();
+      const offer = await pc.createOffer({ iceRestart: true });
+      await pc.setLocalDescription(offer);
+      wsRef.current?.send(JSON.stringify({
+        type: 'offer',
+        roomId: roomIdRef.current,
+        payload: offer,
+      }));
+    } catch (e) {
+      console.error('ICE restart failed', e);
+    }
+  }
 
   const createPeerConnection = useCallback(() => {
     if (pcRef.current) {
@@ -233,10 +360,33 @@ export function useWebRTC(userName: string = '') {
 
     pc.onconnectionstatechange = () => {
       console.log('Connection state:', pc.connectionState);
+      if (pcRef.current !== pc) return;
+
       if (pc.connectionState === 'connected') {
+        clearPeerGraceTimer();
         setStatus('connected');
         checkConnectionType(pc);
-      } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        return;
+      }
+
+      if (pc.connectionState === 'disconnected') {
+        // Transient by definition: ICE keeps probing and usually recovers on its
+        // own. This is exactly what a backgrounded tab looks like, so give it a
+        // grace window instead of declaring the session over.
+        setStatus('reconnecting');
+        startPeerGraceTimer();
+        return;
+      }
+
+      if (pc.connectionState === 'failed') {
+        setStatus('reconnecting');
+        void attemptIceRestart();
+        startPeerGraceTimer();
+        return;
+      }
+
+      if (pc.connectionState === 'closed') {
+        clearPeerGraceTimer();
         setStatus('disconnected');
       }
     };
@@ -308,11 +458,18 @@ export function useWebRTC(userName: string = '') {
   };
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
-    const pc = createPeerConnection();
-    
-    pc.ondatachannel = (event) => {
-      setupDataChannel(event.channel);
-    };
+    const existing = pcRef.current;
+    // An offer arriving while the session is live is a renegotiation (an ICE
+    // restart), not a new pairing. Reusing the connection keeps the open data
+    // channel and any in-flight transfer alive; rebuilding it would kill both.
+    const isRenegotiation = !!existing && isPeerLive() && existing.signalingState !== 'closed';
+    const pc = isRenegotiation ? existing! : createPeerConnection();
+
+    if (!isRenegotiation) {
+      pc.ondatachannel = (event) => {
+        setupDataChannel(event.channel);
+      };
+    }
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     await flushIceQueue();
@@ -712,7 +869,55 @@ export function useWebRTC(userName: string = '') {
     }
   }, []);
 
+  // Page lifecycle. Backgrounding a tab reliably kills the signalling socket
+  // and often wobbles the peer connection; on return, recover straight away
+  // instead of sitting on a backoff or waiting for a timeout to expire.
+  useEffect(() => {
+    const recover = () => {
+      if (!shouldReconnectRef.current || !roomIdRef.current) return;
+
+      const ws = wsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        reconnectAttemptsRef.current = 0; // resume immediately, not on a backoff
+        clearReconnectTimer();
+        connectSocket();
+      }
+
+      const pc = pcRef.current;
+      if (pc && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) {
+        void attemptIceRestart();
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') recover();
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    window.addEventListener('online', recover);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+      window.removeEventListener('online', recover);
+    };
+  }, []);
+
+  // Drop every timer on unmount so a torn-down hook cannot resurrect itself.
+  useEffect(() => () => {
+    clearReconnectTimer();
+    clearPeerGraceTimer();
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  }, []);
+
   const disconnect = useCallback(() => {
+    // An explicit teardown: stop trying to come back.
+    shouldReconnectRef.current = false;
+    reconnectAttemptsRef.current = 0;
+    clearReconnectTimer();
+    clearPeerGraceTimer();
+    try { sessionStorage.removeItem('td:session'); } catch { /* private mode */ }
+
     // Tear the call down first, otherwise the camera and microphone stay live
     // after the user backs out of a room.
     callManagerRef.current?.cleanupCall();
@@ -720,6 +925,7 @@ export function useWebRTC(userName: string = '') {
     if (dcRef.current) dcRef.current.close();
     if (pcRef.current) pcRef.current.close();
     setStatus('idle');
+    setSignalingState('idle');
     setRole(null);
     setRoomId('');
     setFilesProgress({});
@@ -731,6 +937,7 @@ export function useWebRTC(userName: string = '') {
     role,
     roomId,
     status,
+    signalingState,
     connectionType,
     filesProgress,
     messages,

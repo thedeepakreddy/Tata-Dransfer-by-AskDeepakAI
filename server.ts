@@ -41,11 +41,18 @@ async function startServer() {
 
   const rooms = new Map<string, Room>();
 
+  // Chat and call signalling travel over the peer-to-peer data channel, so a
+  // healthy room can sit silent on the socket for a long time. Keep the window
+  // generous and refresh it on pong (see below) so live peers hold it open.
+  const ROOM_TTL_MS = 30 * 60 * 1000;
+  const HEARTBEAT_MS = 25000;
+  const MAX_MISSED_PONGS = 2;
+
   // Cleanup inactive rooms every 10 minutes
   setInterval(() => {
     const now = Date.now();
     for (const [roomId, room] of rooms.entries()) {
-      if (now - room.lastActivity > 10 * 60 * 1000) {
+      if (now - room.lastActivity > ROOM_TTL_MS) {
         // close all sockets
         for (const peer of room.peers) {
           peer.close();
@@ -58,11 +65,6 @@ async function startServer() {
 
   wss.on("connection", (ws) => {
     let currentRoomId: string | null = null;
-    let isAlive = true;
-
-    ws.on("pong", () => {
-      isAlive = true;
-    });
 
     ws.on("message", (message) => {
       try {
@@ -163,20 +165,26 @@ async function startServer() {
     ws.on("close", handleDisconnect);
     ws.on("error", handleDisconnect);
 
-    // Provide a way for the interval to check this socket
-    (ws as any).isAlive = isAlive;
+    // Browsers answer pings automatically, but a backgrounded tab is frozen and
+    // cannot. Count misses instead of dropping on the first one, and treat a
+    // pong as room activity so a quiet room is not reaped while peers are live.
+    (ws as any).missedPongs = 0;
     ws.on("pong", () => {
-      (ws as any).isAlive = true;
+      (ws as any).missedPongs = 0;
+      if (currentRoomId) {
+        const room = rooms.get(currentRoomId);
+        if (room) room.lastActivity = Date.now();
+      }
     });
   });
 
   const heartbeatInterval = setInterval(() => {
     wss.clients.forEach((ws: any) => {
-      if (ws.isAlive === false) return ws.terminate();
-      ws.isAlive = false;
-      ws.ping();
+      if ((ws.missedPongs ?? 0) >= MAX_MISSED_PONGS) return ws.terminate();
+      ws.missedPongs = (ws.missedPongs ?? 0) + 1;
+      try { ws.ping(); } catch { /* socket already gone */ }
     });
-  }, 10000);
+  }, HEARTBEAT_MS);
 
   wss.on("close", () => {
     clearInterval(heartbeatInterval);
