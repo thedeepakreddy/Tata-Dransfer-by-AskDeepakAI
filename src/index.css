@@ -190,13 +190,9 @@ body::before {
 }
 .titlebar .mark .glyph {
   width: 26px; height: 26px;
-  border-radius: 8px;
-  background: var(--beam);
-  display: grid;
-  place-items: center;
-  box-shadow: 0 4px 14px -4px var(--accent-glow);
+  display: block;
+  filter: drop-shadow(0 4px 8px var(--accent-glow));
 }
-.titlebar .mark .glyph svg { width: 15px; height: 15px; color: #0A0B10; }
 
 .traffic { display: none; }
 

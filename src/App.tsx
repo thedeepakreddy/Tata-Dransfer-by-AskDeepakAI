@@ -53,11 +53,7 @@ export default function App() {
         {/* Desktop top bar */}
         <header className="titlebar">
           <div className="mark">
-            <span className="glyph">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
-              </svg>
-            </span>
+            <img className="glyph" src="/icon-192.png" alt="" width={26} height={26} />
             Tata Dransfer
           </div>
 
