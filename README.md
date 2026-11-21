@@ -62,5 +62,4 @@ npm run start
 Tata Dransfer does not store any files, messages, or communication data on central servers. The backend infrastructure is strictly utilized for initial signaling and establishing direct WebRTC connections between peers.
 
 ## License
-
-This project is proprietary and confidential. Unauthorized copying of this file, via any medium, is strictly prohibited unless explicit permission is granted.
+MIT license 
